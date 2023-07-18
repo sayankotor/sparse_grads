@@ -71,30 +71,30 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, bias, len_grads, treshold, U, VT):
         treshold = treshold
+
         if (len_grads < 30 ):    # space 1
             ctx.save_for_backward(input, weight, bias)
             return  input @ weight.T + bias
         else:
             #u1, U, VT = Tucker_Decomposition(torch.cat(MyLayer.grads))
-            input = input @ VT.T ## Here change
             ctx.save_for_backward(input, weight, bias, U, VT) # space 2
         ctx.size = input.shape[0]
         
+        #print (input.shape)
         #print (weight.shape)
         #print (bias.shape)
         #print (len(grads)),
         #print (treshold)
         #print (U.shape, VT.shape)
 
-        return  input @ weight.T@ U  + bias # space 2  # HERE change
+        return  input @ VT @ weight.T @ U  + bias # space 2
     
 
 
     @staticmethod
     def backward(ctx, grad_output):
-
         if len(ctx.saved_tensors) == 3:  # space 1
-            input, weight, bias = ctx.saved_tensors
+            input,weight, bias = ctx.saved_tensors
             grad_input = grad_weight = grad_bias = None
             if ctx.needs_input_grad[0]:
                 grad_input = grad_output @ weight
@@ -108,16 +108,16 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
             
         elif len(ctx.saved_tensors) == 5: # space 2
 
-            input, weight, bias, U, VT = ctx.saved_tensors
+            input,weight, bias, U, VT = ctx.saved_tensors
             grad_input = grad_weight = grad_bias = None
-            # print (grad_output.shape, VT.T.shape, U.shape)
-            grad_output = grad_output @ U.T # !!!! HERE change
             if ctx.needs_input_grad[0]:
-                grad_input = grad_output @ weight
+                grad_input = grad_output @ weight @ VT # grad_output @ U.T @ weight @ VT.T 
             if ctx.needs_input_grad[1]:
                 grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
-                grad_weight = grad_weight # !!!! HERE change
-                grad_weight = torch.where(torch.abs(grad_weight) >= 0.0, grad_weight, torch.tensor(0.0).to('cuda'))  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
+                grad_weight = U @ grad_weight @ VT  
+                print ('grad_weight.shape', grad_weight.shape)
+                print ('self.U', U.shape, 'self.VT', VT.shape)
+                grad_weight = torch.where(torch.abs(grad_weight) >= 0.00, grad_weight, torch.tensor(0.0).to('cuda'))  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
             if bias is not None and ctx.needs_input_grad[2]:
                 grad_bias = grad_output
             
@@ -150,15 +150,14 @@ class SparseGradLinear(torch.nn.Module):
         
         
     def create_UV(self):
-        print ("self.len_grads", self.len_grads)
         if (self.len_grads >= 30):
             self.grads = torch.stack(self.grads[:30])
             u1, U, VT = Tucker_Decomposition(self.grads)
             self.U = U
-            self.VT = VT
             self.U.requires_grad = False
+            self.VT = VT
             self.VT.requires_grad = False
-            #print ("self.U", self.U.shape, "self.VT", self.VT.shape)
+            print ("self.weight", self.weight.shape)           
             self.weight = torch.nn.Parameter(self.U@self.weight@self.VT)#torch.nn.Parameter(self.U@self.weight@self.VT)
         else:
             print ("please do 30 optimizer steps")
@@ -176,7 +175,7 @@ class SparseGradLinear(torch.nn.Module):
         
     def forward(self, x):
         
-        if ((self.U is None) and (self.VT is None) and len(self.grads)>=30):
+        if ((self.U is None) and (self.VT is None) and self.len_grads>=30):
             print ("created matrix")
             self.create_UV()
             
@@ -206,15 +205,15 @@ def replace_bert_layers(model):
           
         #print ("new shape", layer.intermediate.dense.weight.shape)
         
-        token_dim, hidden_dim = layer.output.dense.weight.shape
+        #token_dim, hidden_dim = layer.output.dense.weight.shape
         #print ("output")
         #print ("old shape", token_dim, hidden_dim)
         
-        new_layer = SparseGradLinear(token_dim, hidden_dim)
+        #new_layer = SparseGradLinear(token_dim, hidden_dim)
 
-        new_layer.from_linear(layer.output.dense)
+        #new_layer.from_linear(layer.output.dense)
 
-        model.bert.encoder.layer[i].output.dense = new_layer
+        #model.bert.encoder.layer[i].output.dense = new_layer
           
         #print ("new shape", layer.output.dense.weight.shape)
         #print ("\n\n")
