@@ -95,6 +95,10 @@ def sparsemat_mat(smat, mat):
     print('vmap ended')
     return res.reshape(a,b,e)
 
+# +
+
+
+
 class LinearFunctionSparseGrad(torch.autograd.Function):
 
         # Note that forward, setseup_context, and backward are @staticmethods
@@ -102,66 +106,35 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
     def forward(ctx, input, weight, bias, treshold, U, VT):
         treshold = treshold
         input = input @ U.T 
-        #BATCH IS 4 HERREREEEE
-        b, r, c = input.shape
-        #ii = input.view(b, 1, -1)
-        #inds = torch.argsort(-abs(ii))
-        #ii_sorted = torch.gather(-abs(ii), 2, inds)
         
-        #thresholds = abs(ii_sorted[:, :, 101])#.to(input.device)
-        thresholds = torch.tensor(2.701).to(input.device)
-        input = torch.where(abs(input)> thresholds, input, torch.tensor(0.).to(input.device))
-        rows, cols = torch.nonzero(input.reshape(b*r, c), as_tuple=True)
-        rows, cols = torch.unique(rows), torch.unique(cols)
-        input_reshaped = input.reshape(b*r, c)[rows, :]
-        res_indirect = input.reshape(b*r, c)[rows, :][:, cols] @ weight.T[cols, :]
-        
-        res_ = res_indirect  @ VT.T
-        I = get_I_matrix(b, r)
-        res = I[:, rows] @ res_
-        res = res.reshape(b, -1,VT.T.shape[1] )
-        tup = torch.tensor([int(b*r) ,b,r,c])
-        ctx.save_for_backward(input_reshaped, rows, tup ,weight, bias, U, VT) # space 2
+        ctx.save_for_backward(input,weight, bias, U, VT) # space 2
         ctx.size = input.shape[0]
-        return   res + bias
+        
+        return  input @ weight.T @ VT.T + bias # space 2  # HERE change
 
 
     @staticmethod
     def backward(ctx, grad_output):
 
-        if len(ctx.saved_tensors) == 3:  # space 1
-            input, weight, bias = ctx.saved_tensors
-            grad_input = grad_weight = grad_bias = None
-            if ctx.needs_input_grad[0]:
-                grad_input = grad_output @ weight
-            if ctx.needs_input_grad[1]:
-                #print (grad_output.T.shape)
-                #print (input.shape)
-                grad_weight =  torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
-  
-            if bias is not None and ctx.needs_input_grad[2]:
-                grad_bias = grad_output
+        input, weight, bias, U, VT = ctx.saved_tensors
+        grad_input = grad_weight = grad_bias = None
+        # print (grad_output.shape, VT.T.shape, U.shape)
+        grad_output = grad_output @ VT# !!!! HERE change
+        if ctx.needs_input_grad[0]:
+            grad_input = grad_output @ weight @ U
+        if ctx.needs_input_grad[1]:
+            grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
+            #grad_weight = VT.T @ grad_weight  # !!!! HERE change
+            #grad_weight = torch.where(torch.abs(grad_weight) >= 0.001, grad_weight, torch.tensor(0.0).to('cuda')).to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
+        if bias is not None and ctx.needs_input_grad[2]:
+            grad_bias = grad_output
             
-        elif len(ctx.saved_tensors) == 7: # space 2
+        return grad_input, grad_weight, grad_bias, None, None, None
+            
+        #return grad_input, grad_weight, grad_bias, None, None, None
 
-            input_reshaped, rows,(num_rows, b , r , c) , weight, bias, U, VT = ctx.saved_tensors
-            grad_input = grad_weight = grad_bias = None
-            # print (grad_output.shape, VT.T.shape, U.shape)
-            grad_output = grad_output @ VT # !!!! HERE change
-            if ctx.needs_input_grad[0]:
-                grad_input = grad_output @ weight @ U
-            if ctx.needs_input_grad[1]:
-                I = get_I_matrix(b, r)
-                input = I[:, rows] @ input_reshaped
-                input = input.reshape(b,r,c)
-                grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
-                #print('grad_weight', grad_weight.shape, U.shape, VT.shape)
-                # grad_weight = VT.T @ grad_weight  # !!!! HERE change
-                #grad_weight = torch.where(torch.abs(grad_weight) >= 0.001, grad_weight, torch.tensor(0.0).to('cuda'))  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
-            if bias is not None and ctx.needs_input_grad[2]:
-                grad_bias = grad_output
-            
-        return grad_input, grad_weight, grad_bias, None, None, None, None
+
+# -
 
 class SparseGradLinear(torch.nn.Module):
     __constants__ = ['in_features', 'out_features']
@@ -184,6 +157,7 @@ class SparseGradLinear(torch.nn.Module):
         self.U = None
         self.VT = None
         self.is_sparse = False
+        self.acts = None
                 
         
     def from_linear(self, linear: nn.Linear, tuple_UV = tuple(), transpose=False):
@@ -191,9 +165,11 @@ class SparseGradLinear(torch.nn.Module):
             self.weight = torch.nn.Parameter(linear.weight.data.T)
         else:
             self.weight = torch.nn.Parameter(linear.weight.data)
+         
         self.bias = torch.nn.Parameter(linear.bias.data.clone()) if linear.bias is not None else None
         self.U = tuple_UV[0]
         self.VT = tuple_UV[1]
+        self.weight = torch.nn.Parameter(self.VT.T@self.weight@self.U.T)   
         
     def rewert_to_linear(self):
         self.weight = torch.nn.Parameter(self.VT@self.weight@self.U)
@@ -203,7 +179,7 @@ class SparseGradLinear(torch.nn.Module):
         
         
     def forward(self, x):
-        
+        self.acts = x@self.U.T
         return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, self.U, self.VT)
 
             
