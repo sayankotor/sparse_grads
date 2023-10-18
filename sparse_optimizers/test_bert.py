@@ -68,6 +68,10 @@ tokenized_dataset = get_dataset(tokenizer, dataset_cola, dset_type = 'cola')
 
 metric = ev.load("glue", 'cola')
 
+import pickle
+
+
+
         
 ## training arguments
 
@@ -90,7 +94,7 @@ training_args1 = TrainingArguments(
 
 training_args2 = TrainingArguments(
     learning_rate=2e-5,
-    num_train_epochs=2,
+    num_train_epochs=1,
     evaluation_strategy="steps",
     skip_memory_metrics = False,
     eval_steps=100,
@@ -115,6 +119,8 @@ print("Memory for the model and input dataset: {} MB".format( \
 
 if args.sparse_grad:
     UV_dict = pre_trainer_function(model, training_args1, tokenized_dataset)
+    with open('filename.pickle', 'wb') as handle:
+        pickle.dump(UV_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     torch.cuda.synchronize()
     print("Memory after pre-training sparse grad: {} MB".format( \
             torch.cuda.max_memory_allocated(args.cuda)/1024./1024.))
@@ -137,5 +143,6 @@ print("Memory after training: {} MB".format( \
 
 
 # Report memory after training iteration
+torch.cuda.synchronize()
 print("Peak memory usage: {} MB".format( \
         torch.cuda.max_memory_allocated(args.cuda)/1024./1024.))

@@ -103,11 +103,15 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
 
         # Note that forward, setseup_context, and backward are @staticmethods
     @staticmethod
-    def forward(ctx, input, weight, bias, treshold, U, VT):
+    def forward(ctx, input, weight, bias, treshold, layer_type):
+        if (layer_type == torch.tensor(0)):
+            U, VT = SparseGradLinearIntermediate._U, SparseGradLinearIntermediate._VT
+        else:
+            U, VT = SparseGradLinearOutput._U, SparseGradLinearOutput._VT
         treshold = treshold
         input = input @ U.T 
         
-        ctx.save_for_backward(input,weight, bias, U, VT) # space 2
+        ctx.save_for_backward(input,weight, bias, layer_type) # space 2
         ctx.size = input.shape[0]
         
         #return  input @ weight.T + bias # space 2  # HERE change
@@ -117,12 +121,25 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
 
-        input, weight, bias, U, VT = ctx.saved_tensors
+        input, weight, bias, layer_type = ctx.saved_tensors
+        
+        #if (layer_type == torch.tensor(0)):
+            #U, VT = SparseGradLinearIntermediate._U, SparseGradLinearIntermediate._VT
+        #else:
+            #U, VT = SparseGradLinearOutput._U, SparseGradLinearOutput._VT
+        
         grad_input = grad_weight = grad_bias = None
-        # print (grad_output.shape, VT.T.shape, U.shape)
-        grad_output = grad_output @ VT# !!!! HERE change
+        
+        if (layer_type == torch.tensor(0)):
+            grad_output = grad_output @ SparseGradLinearIntermediate._VT# !!!! HERE change
+        else:
+            grad_output = grad_output @SparseGradLinearOutput._VT
+            
         if ctx.needs_input_grad[0]:
-            grad_input = grad_output @ weight @ U
+            if (layer_type == torch.tensor(0)):
+                grad_input = grad_output @ weight @ SparseGradLinearIntermediate._U
+            else:
+                grad_input = grad_output @ weight @ SparseGradLinearOutput._U
         if ctx.needs_input_grad[1]:
             grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
             #grad_weight = VT.T @ grad_weight  # !!!! HERE change
@@ -134,18 +151,30 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
         if bias is not None and ctx.needs_input_grad[2]:
             grad_bias = grad_output
             
-        return grad_input, grad_weight, grad_bias, None, None, None
+        return grad_input, grad_weight, grad_bias, None, None
             
         #return grad_input, grad_weight, grad_bias, None, None, None
 
 
 # -
 
-class SparseGradLinear(torch.nn.Module):
+class SparseGradLinearIntermediate(torch.nn.Module):
     __constants__ = ['in_features', 'out_features']
-    in_features: int
-    out_features: int
-    weight: Tensor
+    _U = {}
+    _V = {}
+
+    @property
+    def U(self):
+        return SparseGradLinearIntermediate._U
+    
+    def VT(self):
+        return SparseGradLinearIntermediate._VT
+    
+
+    @staticmethod
+    def set_UV(tuple_UV):
+        SparseGradLinearIntermediate._U = tuple_UV[0]
+        SparseGradLinearIntermediate._VT = tuple_UV[1]
 
     def __init__(self, in_features: int, out_features: int, bias: bool = True,
                  device=None, dtype=None) -> None:
@@ -159,8 +188,8 @@ class SparseGradLinear(torch.nn.Module):
         else:
             self.register_parameter('bias', None)
         self.treshold = 1e-3
-        self.U = None
-        self.VT = None
+        #self.U = None
+        #self.VT = None
         self.is_sparse = False
         self.acts = None
                 
@@ -172,12 +201,13 @@ class SparseGradLinear(torch.nn.Module):
             self.weight = torch.nn.Parameter(linear.weight.data)
          
         self.bias = torch.nn.Parameter(linear.bias.data.clone()) if linear.bias is not None else None
-        self.U = tuple_UV[0]
-        self.VT = tuple_UV[1]
-        self.weight = torch.nn.Parameter(self.VT.T@self.weight@self.U.T)   
+        #self.U = tuple_UV[0]
+        #self.VT = tuple_UV[1]
+        SparseGradLinearIntermediate.set_UV(tuple_UV)
+        self.weight = torch.nn.Parameter(SparseGradLinearIntermediate._VT.T@self.weight@SparseGradLinearIntermediate._U.T)   
         
     def rewert_to_linear(self):
-        self.weight = torch.nn.Parameter(self.VT@self.weight@self.U)
+        self.weight = torch.nn.Parameter(SparseGradLinearIntermediate._VT@self.weight@SparseGradLinearIntermediate._U)
         self.bias = torch.nn.Parameter(linear.bias.data.clone()) if linear.bias is not None else None
         self.is_sparse = False
         
@@ -185,7 +215,71 @@ class SparseGradLinear(torch.nn.Module):
         
     def forward(self, x):
         # self.acts = x@self.U.T
-        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, self.U, self.VT)
+        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(0))
+    
+    
+class SparseGradLinearOutput(torch.nn.Module):
+    __constants__ = ['in_features', 'out_features']
+    in_features: int
+    out_features: int
+    weight: Tensor
+        
+    _U = {}
+    _V = {}
+
+    @property
+    def U(self):
+        return SparseGradLinearOutput._U
+    
+    def VT(self):
+        return SparseGradLinearOutput._VT
+    
+
+    @staticmethod
+    def set_UV(tuple_UV):
+        SparseGradLinearOutput._U = tuple_UV[0]
+        SparseGradLinearOutput._VT = tuple_UV[1]
+
+    def __init__(self, in_features: int, out_features: int, bias: bool = True,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = Parameter(torch.empty((out_features, in_features), **factory_kwargs))
+        if bias:
+            self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
+        else:
+            self.register_parameter('bias', None)
+        self.treshold = 1e-3
+        #self.U = None
+        #self.VT = None
+        self.is_sparse = False
+        self.acts = None
+                
+        
+    def from_linear(self, linear: nn.Linear, tuple_UV = tuple(), transpose=False):
+        if transpose:
+            self.weight = torch.nn.Parameter(linear.weight.data.T)
+        else:
+            self.weight = torch.nn.Parameter(linear.weight.data)
+         
+        self.bias = torch.nn.Parameter(linear.bias.data.clone()) if linear.bias is not None else None
+        #self.U = tuple_UV[0]
+        #self.VT = tuple_UV[1]
+        SparseGradLinearOutput.set_UV(tuple_UV)
+        self.weight = torch.nn.Parameter(SparseGradLinearOutput._VT.T@self.weight@SparseGradLinearOutput._U.T)   
+        
+    def rewert_to_linear(self):
+        self.weight = torch.nn.Parameter(SparseGradLinearOutput._VT@self.weight@SparseGradLinearOutput._U)
+        self.bias = torch.nn.Parameter(linear.bias.data.clone()) if linear.bias is not None else None
+        self.is_sparse = False
+        
+        
+        
+    def forward(self, x):
+        # self.acts = x@self.U.T
+        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(1))
 
             
 
@@ -203,7 +297,7 @@ def replace_bert_layers(model, UV_dict):
         #print ("dense")
         #print ("old shape", token_dim, hidden_dim)
         
-        new_layer = SparseGradLinear(token_dim, hidden_dim)
+        new_layer = SparseGradLinearIntermediate(token_dim, hidden_dim)
 
         new_layer.from_linear(layer.intermediate.dense, UV_dict['interm'])
 
@@ -215,7 +309,7 @@ def replace_bert_layers(model, UV_dict):
         #print ("output")
         #print ("old shape", token_dim, hidden_dim)
         
-        new_layer = SparseGradLinear(token_dim, hidden_dim)
+        new_layer = SparseGradLinearOutput(token_dim, hidden_dim)
 
         new_layer.from_linear(layer.output.dense, UV_dict['output'])
 

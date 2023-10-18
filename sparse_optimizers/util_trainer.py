@@ -23,12 +23,14 @@ def pre_trainer_function(model, training_args1, tokenized_dataset):
     UV_dict = {}
 
     grads1 = torch.stack(trainer.grads1[:360])
+    grads2 = torch.stack(trainer.grads2[:360])
+    del trainer
     u1, VT, U = Tucker_Decomposition(grads1)
     UV_dict.update({"output":tuple((U, VT))})
-    grads2 = torch.stack(trainer.grads2[:360])
     u1, VT, U = Tucker_Decomposition(grads2)
     UV_dict.update({"interm":tuple((U, VT))})
 #     model = sparse_grad_linear(model, UV_dict)
+    del grads1, grads2
     return UV_dict
 
 
