@@ -12,7 +12,7 @@ def sparse_grad_linear(model, UV_dict):
     print ("created bert with sparse grads")
     return model
 
-def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
+def get_dataset(tokenizer, raw_dataset, dset_type = 'cola', max_length=128):
     task_to_keys = {
     "cola": ("sentence", None),
     "mnli": ("premise", "hypothesis"),
@@ -28,12 +28,9 @@ def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
 
     def preprocess_function(examples):
             # Tokenize the texts
-            args = (
-                (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
-            )
+            args = [examples[sentence1_key],] if sentence2_key is None else [examples[sentence1_key], examples[sentence2_key]]
 
-
-            result = tokenizer.batch_encode_plus(*args, max_length=128, truncation=True, padding="max_length")
+            result = tokenizer(*args, max_length=max_length, truncation=True, padding="max_length")
 
             result["label"] = examples["label"]
             return result
@@ -58,7 +55,3 @@ def compute_metrics(p: EvalPrediction):
             return result
         else:
             return {"accuracy": (preds_ == p.label_ids).astype(np.float32).mean().item()}
-        
-
-
-
