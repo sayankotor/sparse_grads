@@ -1,0 +1,10 @@
+__pycache__/
+build/
+dist/
+light_attention/
+/model
+.ipynb_checkpoints/
+*.pyc
+*.egg-info
+*.png
+*submit.sh
