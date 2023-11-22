@@ -7,10 +7,16 @@ from typing import Callable, Optional
 import torch
 from torch.nn import Parameter
 
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer
+import optuna
+from optuna.pruners import BasePruner, NopPruner
+from optuna.trial import TrialState
+from optuna.study import StudyDirection
+
+from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer, EarlyStoppingCallback
 from datasets import load_dataset, Value
 
 from util import get_dataset, compute_metrics
+
 
 
 class LoRALinear(torch.nn.Module):
@@ -127,18 +133,15 @@ def map_module(root: torch.nn.Module,
 
     return _map_module(root, func_safe, re.compile(patt or r'.*'), '')
 
-
 def convert_low_rank(rank: int, module: torch.nn.Module, path: str):
     if not isinstance(module, torch.nn.Linear):
         raise ValueError('Only linear layer can be converted: '
                          f'type={type(module)}.')
     return LoRALinear.from_linear(module, rank)
 
-
 def convert_model(model, path: str, rank: int):
     return map_module(
         model, partial(convert_low_rank, rank), path)
-
 
 def print_trainable_parameters(model):
     trainable_params = 0
@@ -157,8 +160,7 @@ def print_trainable_parameters(model):
     )
     print('trainable params:', set(trainable_params_names))
 
-
-def make_dataset(model_path_name, dataset_path, dataset_name):
+def make_dataset(model_path_name, dataset_path, dataset_name, max_length):
     dataset = load_dataset(dataset_path, dataset_name)
 
     label_list = dataset["train"].features["label"]
@@ -169,9 +171,8 @@ def make_dataset(model_path_name, dataset_path, dataset_name):
 
     tokenizer = AutoTokenizer.from_pretrained(model_path_name)
 
-    tokenized_dataset = get_dataset(tokenizer, dataset, dset_type=dataset_name)
+    tokenized_dataset = get_dataset(tokenizer, dataset, dset_type=dataset_name, max_length=max_length)
     return tokenized_dataset, num_labels
-
 
 def make_model(model_path, enable_lora, lora_modules_path, num_labels,
     lora_rank, verbose=False):
@@ -197,7 +198,7 @@ def make_model(model_path, enable_lora, lora_modules_path, num_labels,
 
     return model
 
-def make_trainer(model, tokenized_dataset, output_dir, seed, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
+def make_trainer(model, tokenized_dataset, output_dir, seed, metric_for_best_model, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
     training_args = TrainingArguments(
         learning_rate=lr,
         num_train_epochs=num_epoches,
@@ -205,16 +206,20 @@ def make_trainer(model, tokenized_dataset, output_dir, seed, batch_size=16, lr=2
         evaluation_strategy="steps",
         skip_memory_metrics = False,
         eval_steps=100,
+        logging_steps=50,
+        metric_for_best_model=metric_for_best_model,
+        load_best_model_at_end=True,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        save_strategy='no',
+        save_strategy='steps',
         overwrite_output_dir=True,
         output_dir=output_dir,
         # The next line is important to ensure the dataset labels are properly passed to the model
         remove_unused_columns=True,
         seed=seed,
         report_to='none',
-        warmup_ratio=0.06,
+        lr_scheduler_type='constant',
+        warmup_ratio=0.,
         )
 
     validation_split_name = 'validation' if 'validation' in tokenized_dataset.keys() else 'validation_matched'
@@ -225,22 +230,26 @@ def make_trainer(model, tokenized_dataset, output_dir, seed, batch_size=16, lr=2
             train_dataset=tokenized_dataset["train"],
             eval_dataset=tokenized_dataset[validation_split_name],
             compute_metrics=compute_metrics,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=5)]
         )
 
     return trainer
 
-def train(model_path, task, enable_lora, lora_modules_path, seed, batch_size, lr, num_epoches, max_steps, lora_rank=None, verbose=False):
-    tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task)
+def train(model_path, task, enable_lora, lora_modules_path, seed, batch_size, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
+    tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
     model = make_model(model_path, enable_lora, lora_modules_path, num_labels, lora_rank, verbose=verbose).to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
+    checkpoint_dir = str(Path('model') / 'checkpt')
 
-    trainer = make_trainer(model, tokenized_dataset, output_dir, seed, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
+    trainer = make_trainer(model, tokenized_dataset, checkpoint_dir, seed, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
     
     train_result = trainer.train()
     eval_result = trainer.evaluate()
 
     trainer.log_metrics("train", train_result.metrics)
     trainer.log_metrics("eval", eval_result)
+
+    print(eval_result)
 
     # Report memory after training operation
     torch.cuda.synchronize()
@@ -253,17 +262,40 @@ def train(model_path, task, enable_lora, lora_modules_path, seed, batch_size, lr
     print("Peak memory usage: {} MB".format( \
             torch.cuda.max_memory_allocated()/1024./1024.))
 
+    return eval_result[f'eval_{metric_for_best_model}']
+
+
+def optuna_objective(trial):
+    batch_size = trial.suggest_categorical("batch_size", [4, 8, 16, 32])
+    lr = trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True)
+
+    val_metric = train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=metric_for_best_model, lora_rank=lora_rank, verbose=verbose)
+    return val_metric
+
+
 
 if __name__ == '__main__':
-    model_path_name = r"bert-base-uncased"
+    model_path = r"bert-base-uncased"
     lora_modules_path = '/bert/encoder/layer/\d+/(output/dense|intermediate/dense)'
     dataset_path = 'glue'
+    metric_for_best_model = 'combined_score'
+    lora_rank = 7
     
     # tasks = ['cola', 'mnli', 'mrpc', 'qnli', 'qqp', 'rte', 'sst2', 'stsb', 'wnli']
     tasks = ['cola',]
     seed = 34
+    max_length = 128
+    verbose = True
 
     # make_model(model_path_name, enable_lora=True, num_labels=2, lora_rank=2, verbose=True)
     for task in tasks:
-        train(model_path_name, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=16, lr=5e-4, num_epoches=-1, max_steps=2, lora_rank=7, verbose=True)
+        # train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, metric_for_best_model=metric_for_best_model,
+        #  batch_size=16, max_length=max_length, lr=lr, num_epoches=1, max_steps=1, lora_rank=lora_rank, verbose=True)
+
+        study_name = task  # Unique identifier of the study.
+        storage_name = f"sqlite:///optuna.db"
+
+        # # study = optuna.create_study(direction="minimize", pruner=ImpatientPruner(patience=10, min_delta=0.5), storage=storage_name)
+        study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
+        study.optimize(optuna_objective, n_trials=20, timeout=60*60*5, n_jobs=1, gc_after_trial=True)
     
