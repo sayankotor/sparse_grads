@@ -198,20 +198,22 @@ def make_model(model_path, enable_lora, lora_modules_path, num_labels,
 
     return model
 
-def make_trainer(model, tokenized_dataset, output_dir, seed, metric_for_best_model, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
+def make_trainer(model, tokenized_dataset, output_dir, seed, metric_for_best_model, eval_steps, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
     training_args = TrainingArguments(
         learning_rate=lr,
         num_train_epochs=num_epoches,
         max_steps=max_steps,
         evaluation_strategy="steps",
         skip_memory_metrics = False,
-        eval_steps=100,
-        logging_steps=50,
+        eval_steps=eval_steps,
+        save_steps=eval_steps,
+        logging_steps=eval_steps // 2,
         metric_for_best_model=metric_for_best_model,
         load_best_model_at_end=True,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         save_strategy='steps',
+        save_total_limit=1,
         overwrite_output_dir=True,
         output_dir=output_dir,
         # The next line is important to ensure the dataset labels are properly passed to the model
@@ -235,13 +237,13 @@ def make_trainer(model, tokenized_dataset, output_dir, seed, metric_for_best_mod
 
     return trainer
 
-def train(model_path, task, enable_lora, lora_modules_path, seed, batch_size, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
+def train(model_path, task, enable_lora, lora_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
     tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
     model = make_model(model_path, enable_lora, lora_modules_path, num_labels, lora_rank, verbose=verbose).to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
     checkpoint_dir = str(Path('model') / 'checkpt')
 
-    trainer = make_trainer(model, tokenized_dataset, checkpoint_dir, seed, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
+    trainer = make_trainer(model, tokenized_dataset, checkpoint_dir, seed, eval_steps=eval_steps, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
     
     train_result = trainer.train()
     eval_result = trainer.evaluate()
@@ -269,7 +271,9 @@ def optuna_objective(trial):
     batch_size = trial.suggest_categorical("batch_size", [4, 8, 16, 32])
     lr = trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True)
 
-    val_metric = train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=metric_for_best_model, lora_rank=lora_rank, verbose=verbose)
+    eval_steps = int(task2evalsteps[task] * 16. / batch_size)
+
+    val_metric = train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=metric_for_best_model, lora_rank=lora_rank, verbose=verbose)
     return val_metric
 
 
@@ -286,6 +290,18 @@ if __name__ == '__main__':
     seed = 34
     max_length = 128
     verbose = True
+
+    task2evalsteps = {
+        'cola': 100,
+        'mnli': 10000,
+        'mrpc': 100,
+        'qnli': 100,
+        'qqp': 10000,
+        'rte': 10,
+        'sst2': 1000,
+        'stsb': 100,
+        'wnli': 10,
+    }
 
     # make_model(model_path_name, enable_lora=True, num_labels=2, lora_rank=2, verbose=True)
     for task in tasks:
