@@ -3,6 +3,7 @@ from pathlib import Path
 from math import sqrt
 from functools import partial, wraps
 from typing import Callable, Optional
+import numpy as np
 
 import torch
 from torch.nn import Parameter
@@ -12,13 +13,27 @@ from optuna.pruners import BasePruner, NopPruner
 from optuna.trial import TrialState
 from optuna.study import StudyDirection
 
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer, EarlyStoppingCallback
+from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer, EarlyStoppingCallback, EvalPrediction
+import evaluate as ev
 from datasets import load_dataset, Value
 
-from util import get_dataset, compute_metrics
+from util import get_dataset#, compute_metrics
 
 
+class MetricsComputer:
+    def __init__(self, task):
+        self.task = task
+        self.metric = ev.load("glue", task)
 
+    def __call__(self, p: EvalPrediction):
+            preds_ = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+            if self.task != 'stsb':
+                preds_ = np.argmax(preds_, axis=1)
+            
+            result = self.metric.compute(predictions=preds_, references=p.label_ids)
+            return result
+
+    
 class LoRALinear(torch.nn.Module):
     r"""A reimplementation of LoRA linear for parameter efficient training.
 
@@ -198,7 +213,7 @@ def make_model(model_path, enable_lora, lora_modules_path, num_labels,
 
     return model
 
-def make_trainer(model, tokenized_dataset, output_dir, seed, metric_for_best_model, eval_steps, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
+def make_trainer(model, task, tokenized_dataset, output_dir, seed, metric_for_best_model, eval_steps, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
     training_args = TrainingArguments(
         learning_rate=lr,
         num_train_epochs=num_epoches,
@@ -231,19 +246,19 @@ def make_trainer(model, tokenized_dataset, output_dir, seed, metric_for_best_mod
             args=training_args,
             train_dataset=tokenized_dataset["train"],
             eval_dataset=tokenized_dataset[validation_split_name],
-            compute_metrics=compute_metrics,
+            compute_metrics=MetricsComputer(task),
             callbacks=[EarlyStoppingCallback(early_stopping_patience=5)]
         )
 
     return trainer
 
-def train(model_path, task, enable_lora, lora_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
+def train(run, model_path, task, enable_lora, lora_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
     tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
     model = make_model(model_path, enable_lora, lora_modules_path, num_labels, lora_rank, verbose=verbose).to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
-    checkpoint_dir = str(Path('model') / 'checkpt')
+    checkpoint_dir = str(Path('model') / f'checkpt_{run}')
 
-    trainer = make_trainer(model, tokenized_dataset, checkpoint_dir, seed, eval_steps=eval_steps, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
+    trainer = make_trainer(model, task, tokenized_dataset, checkpoint_dir, seed, eval_steps=eval_steps, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
     
     train_result = trainer.train()
     eval_result = trainer.evaluate()
@@ -273,7 +288,7 @@ def optuna_objective(trial):
 
     eval_steps = int(task2evalsteps[task] * 16. / batch_size)
 
-    val_metric = train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=metric_for_best_model, lora_rank=lora_rank, verbose=verbose)
+    val_metric = train(run, model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
     return val_metric
 
 
@@ -282,11 +297,12 @@ if __name__ == '__main__':
     model_path = r"bert-base-uncased"
     lora_modules_path = '/bert/encoder/layer/\d+/(output/dense|intermediate/dense)'
     dataset_path = 'glue'
-    metric_for_best_model = 'combined_score'
     lora_rank = 7
     
-    # tasks = ['cola', 'mnli', 'mrpc', 'qnli', 'qqp', 'rte', 'sst2', 'stsb', 'wnli']
-    tasks = ['cola',]
+    # tasks, run =  ['cola', 'mnli', 'mrpc'], 0
+    # tasks, run = ['qnli', 'qqp', 'rte'], 1
+    tasks, run = ['sst2', 'stsb', 'wnli'], 2
+
     seed = 34
     max_length = 128
     verbose = True
@@ -303,15 +319,25 @@ if __name__ == '__main__':
         'wnli': 10,
     }
 
-    # make_model(model_path_name, enable_lora=True, num_labels=2, lora_rank=2, verbose=True)
+    task2metric_for_best_model = {
+        'cola': 'matthews_correlation',
+        'mnli': 'accuracy',
+        'mrpc': 'accuracy',
+        'qnli': 'accuracy',
+        'qqp': 'accuracy',
+        'rte': 'accuracy',
+        'sst2': 'accuracy',
+        'stsb': 'pearson',
+        'wnli': 'accuracy'
+    }
+
     for task in tasks:
         # train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, metric_for_best_model=metric_for_best_model,
         #  batch_size=16, max_length=max_length, lr=lr, num_epoches=1, max_steps=1, lora_rank=lora_rank, verbose=True)
 
         study_name = task  # Unique identifier of the study.
-        storage_name = f"sqlite:///optuna.db"
+        storage_name = f"sqlite:///optuna_new.db"
 
-        # # study = optuna.create_study(direction="minimize", pruner=ImpatientPruner(patience=10, min_delta=0.5), storage=storage_name)
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
         study.optimize(optuna_objective, n_trials=20, timeout=60*60*5, n_jobs=1, gc_after_trial=True)
     
