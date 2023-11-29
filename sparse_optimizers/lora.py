@@ -1,4 +1,6 @@
 import re
+import os
+import json
 from pathlib import Path
 from math import sqrt
 from functools import partial, wraps
@@ -158,7 +160,7 @@ def convert_model(model, path: str, rank: int):
     return map_module(
         model, partial(convert_low_rank, rank), path)
 
-def print_trainable_parameters(model):
+def get_trainable_parameters(model):
     trainable_params = 0
     all_param = 0
     trainable_params_names = []
@@ -174,6 +176,8 @@ def print_trainable_parameters(model):
         f"lora params: {lora_params} || trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param:.2f}"
     )
     print('trainable params:', set(trainable_params_names))
+
+    return trainable_params, lora_params, all_param
 
 def make_dataset(model_path_name, dataset_path, dataset_name, max_length):
     dataset = load_dataset(dataset_path, dataset_name)
@@ -202,16 +206,14 @@ def make_model(model_path, enable_lora, lora_modules_path, num_labels,
         config=config,
     )
 
-    if verbose:
-        print_trainable_parameters(model)
+    trainable_params, lora_params, all_param = get_trainable_parameters(model)
 
     if enable_lora:
         model = convert_model(model, lora_modules_path, lora_rank)
 
-        if verbose:
-            print_trainable_parameters(model)
+        trainable_params, lora_params, all_param = get_trainable_parameters(model)
 
-    return model
+    return model, trainable_params, lora_params, all_param
 
 def make_trainer(model, task, tokenized_dataset, output_dir, seed, metric_for_best_model, eval_steps, batch_size=16, lr=2e-5, num_epoches=1, max_steps=-1):
     training_args = TrainingArguments(
@@ -254,7 +256,8 @@ def make_trainer(model, task, tokenized_dataset, output_dir, seed, metric_for_be
 
 def train(run, model_path, task, enable_lora, lora_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
     tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
-    model = make_model(model_path, enable_lora, lora_modules_path, num_labels, lora_rank, verbose=verbose).to('cuda')
+    model, trainable_params, lora_params, all_param = make_model(model_path, enable_lora, lora_modules_path, num_labels, lora_rank, verbose=verbose)
+    model = model.to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
     checkpoint_dir = str(Path('model') / f'checkpt_{run}')
 
@@ -270,16 +273,26 @@ def train(run, model_path, task, enable_lora, lora_modules_path, seed, batch_siz
 
     # Report memory after training operation
     torch.cuda.synchronize()
+    end_mem_bytes = torch.cuda.memory_allocated()
     print("Memory after training: {} MB".format( \
-            torch.cuda.memory_allocated()/1024./1024.))
+            end_mem_bytes/1024./1024.))
 
 
     # Report memory after training iteration
     torch.cuda.synchronize()
+    peak_mem_bytes = torch.cuda.max_memory_allocated()
     print("Peak memory usage: {} MB".format( \
-            torch.cuda.max_memory_allocated()/1024./1024.))
+            peak_mem_bytes/1024./1024.))
 
-    return eval_result[f'eval_{metric_for_best_model}']
+    metrics = {'train': train_result.metrics,
+               'val': eval_result,
+               'end_mem_bytes': end_mem_bytes,
+               'peak_mem_bytes': peak_mem_bytes,
+               'trainable_params': trainable_params,
+               'lora_params': lora_params,
+               'all_param': all_param}
+
+    return eval_result[f'eval_{metric_for_best_model}'], metrics
 
 
 def optuna_objective(trial):
@@ -288,7 +301,7 @@ def optuna_objective(trial):
 
     eval_steps = int(task2evalsteps[task] * 16. / batch_size)
 
-    val_metric = train(run, model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
+    val_metric, _ = train(run, model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
     return val_metric
 
 
@@ -303,7 +316,7 @@ if __name__ == '__main__':
     # tasks, run = ['qnli', 'qqp', 'rte'], 1
     tasks, run = ['sst2', 'stsb', 'wnli'], 2
 
-    seed = 34
+    # seed = 34
     max_length = 128
     verbose = True
 
@@ -331,13 +344,46 @@ if __name__ == '__main__':
         'wnli': 'accuracy'
     }
 
+    task2hyperparams = {
+        'cola': {'lr': 4e-5, 'batch_size': 8},
+        'mnli': {'lr': 2e-5, 'batch_size': 8},
+        'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
+        'qnli': {'lr': 4e-5, 'batch_size': 16},
+        'qqp': {'lr': 2e-5, 'batch_size': 16},
+        'rte': {'lr': 3.5e-5, 'batch_size': 8},
+        'sst2': {'lr': 1e-5, 'batch_size': 8},
+        'stsb': {'lr': 2e-5, 'batch_size': 4},
+        'wnli': {'lr': 5e-3, 'batch_size': 32},
+    }
+
+    random_seeds = [42, 3705, 2023, 7, 3612]
+
+    log_dir = './logs'
+
+    if not os.path.isdir(log_dir):
+        os.mkdir(log_dir)
+
     for task in tasks:
-        # train(model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, metric_for_best_model=metric_for_best_model,
-        #  batch_size=16, max_length=max_length, lr=lr, num_epoches=1, max_steps=1, lora_rank=lora_rank, verbose=True)
+        log_file = os.path.join(log_dir, f'{task}.json')
+        
+        for seed in random_seeds:
+            _, metrics = train(run, model_path, task, enable_lora=True, lora_modules_path=lora_modules_path, seed=seed, metric_for_best_model=task2metric_for_best_model[task],
+            batch_size=task2hyperparams[task]['batch_size'], eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']), max_length=max_length, lr=task2hyperparams[task]['lr'], num_epoches=1, max_steps=-1, lora_rank=lora_rank, verbose=True)
 
-        study_name = task  # Unique identifier of the study.
-        storage_name = f"sqlite:///optuna_new.db"
+            if os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    logs = json.load(f)
+            else:
+                logs = {}
 
-        study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
-        study.optimize(optuna_objective, n_trials=20, timeout=60*60*5, n_jobs=1, gc_after_trial=True)
+            with open(log_file, 'w') as f:
+                logs.update({seed: metrics})
+                json.dump(logs, f)
+
+
+        # study_name = task  # Unique identifier of the study.
+        # storage_name = f"sqlite:///optuna_new.db"
+
+        # study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
+        # study.optimize(optuna_objective, n_trials=40, timeout=60*60*40, n_jobs=1, gc_after_trial=True)
     
