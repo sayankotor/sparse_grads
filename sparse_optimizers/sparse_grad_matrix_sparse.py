@@ -28,6 +28,7 @@ def func_collecting_tensors(step, tensor1, tensor2=None):
 
 
 def Tucker_Decomposition(tensor):
+    tensor.req
     n1, n2, n3 = tensor.shape
     u1, _, _ = torch.svd(torch.reshape(tensor, (n1, -1)))
     u2, _, _ = torch.svd(torch.reshape(torch.permute(tensor, [1, 2, 0]), (n2, -1)))
@@ -69,39 +70,53 @@ def get_tucker_tensors(dict_layers):
 def sparsemat_mat(smat, mat):
     a, b, c = smat.shape
     d, e = mat.shape
-    def sparsemat_vec(  vec):
+    def sparsemat_vec(vec):
     # a, b, c = smat.shape
         mat = smat.reshape(a*b, c)
-        print('sparse operations start')
+        #print('sparse operations start')
         inds = mat.to_sparse().indices()
         vals = mat.to_sparse().values()
-        print('sparse operations end')
+        #print('sparse operations end')
         try:
            
             x_senders = vec[0, inds.T[:, 1]]
-            print('senders creation 1')
+            #print('senders creation 1')
         except IndexError:
             vec = vec.unsqueeze(0)
             x_senders = vec[0, inds.T[:, 1]]
-            print('senders creation 2')
-        print('x senders ', vals.shape, x_senders.shape)
-        print('vals.shape',  vals.shape)
+            #print('senders creation 2')
+        #print('x senders ', vals.shape, x_senders.shape)
+        #print('vals.shape',  vals.shape)
         x_senders_m_vals = vals *x_senders
         dt = x_senders_m_vals.dtype
-        print('before 1st return')
+        #print('before 1st return')
         return torch.zeros(max(mat.shape[0], inds.T[:, 0].shape[0]),dtype=dt).to('cuda').scatter_add(0, inds.T[:, 0], x_senders_m_vals)[:mat.shape[0]]
 #     print('in big func')
     res = torch.vmap(sparsemat_vec)(mat.T).T
-    print('vmap ended')
+    #print('vmap ended')
     return res.reshape(a,b,e)
 
 # +
 
+def sparse_to_dense(input, weight):
+    b, r, c = input.shape
+    rows, cols = torch.nonzero(input.reshape(b*r, c), as_tuple=True)
+    rows, cols = torch.unique(rows), torch.unique(cols)
+    res_indirect = input.reshape(b*r, c)[rows, :][:, cols] @ weight[cols, :]
+
+    # res_indirect = res_indirect.reshape(b,r, weight.T.shape[1])
+
+    I = torch.eye(b*r).to('cuda')
+    res = I[:, rows] @ res_indirect
+    res = res.reshape(b, -1,weight.shape[1] )
+  
+    return res
+
+    
 
 
 class LinearFunctionSparseGrad(torch.autograd.Function):
-
-        # Note that forward, setseup_context, and backward are @staticmethods
+    
     @staticmethod
     def forward(ctx, input, weight, bias, treshold, layer_type):
         if (layer_type == torch.tensor(0)):
@@ -110,6 +125,12 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
             U, VT = SparseGradLinearOutput._U, SparseGradLinearOutput._VT
         treshold = treshold
         input = input @ U.T 
+
+        if (layer_type == torch.tensor(0)):
+            SparseGradLinearIntermediate._acts = input # ONLY FOR SHOW MODE
+        else:
+            SparseGradLinearOutput._acts = input # ONLY FOR SHOW MODE
+            
         
         ctx.save_for_backward(input,weight, bias, layer_type) # space 2
         ctx.size = input.shape[0]
@@ -123,31 +144,50 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
 
         input, weight, bias, layer_type = ctx.saved_tensors
         
-        #if (layer_type == torch.tensor(0)):
-            #U, VT = SparseGradLinearIntermediate._U, SparseGradLinearIntermediate._VT
-        #else:
-            #U, VT = SparseGradLinearOutput._U, SparseGradLinearOutput._VT
+        if (layer_type == torch.tensor(0)):
+            U, VT = SparseGradLinearIntermediate._U, SparseGradLinearIntermediate._VT
+        else:
+            U, VT = SparseGradLinearOutput._U, SparseGradLinearOutput._VT
         
         grad_input = grad_weight = grad_bias = None
         
         if (layer_type == torch.tensor(0)):
             grad_output = grad_output @ SparseGradLinearIntermediate._VT# !!!! HERE change
+            #SparseGradLinearIntermediate._out_grads =  grad_output # ONLY FOR SHOW MODE
+            #SparseGradLinearIntermediate._weight = weight @ SparseGradLinearIntermediate._U
         else:
             grad_output = grad_output @SparseGradLinearOutput._VT
+            #SparseGradLinearOutput._out_grads =  grad_output # ONLY FOR SHOW MODE
+            #SparseGradLinearOutput._weight = weight @ SparseGradLinearOutput._U
             
         if ctx.needs_input_grad[0]:
-            if (layer_type == torch.tensor(0)):
-                grad_input = grad_output @ weight @ SparseGradLinearIntermediate._U
-            else:
-                grad_input = grad_output @ weight @ SparseGradLinearOutput._U
+           if (layer_type == torch.tensor(0)):
+                #grad_input = grad_output @ weight @ SparseGradLinearIntermediate._U
+                weight = weight @ SparseGradLinearIntermediate._U
+               
+           else:
+                #grad_input = grad_output @ weight @ SparseGradLinearOutput._U
+                weight = weight @ SparseGradLinearOutput._U
+           #print ("grad_output.shape", grad_output.shape)    
+           grad_input = sparse_to_dense(grad_output, weight)
+           #print ("grad_input.shape", grad_input.shape)
+        
+        #print ("grad_input", torch.count_nonzero(grad_input), grad_input.shape)
         if ctx.needs_input_grad[1]:
             grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
             #grad_weight = VT.T @ grad_weight  # !!!! HERE change
-            #trhld = torch.topk(torch.flatten(grad_weight), 28000).values[26999]
-            grad_weight = torch.where(torch.abs(grad_weight) >= 0.001, grad_weight, torch.tensor(0.0).to('cuda')).to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
+            #trhld = torch.topk(torch.flatten(grad_weight), 28000).values[27999]
+            #grad_weight = torch.where(torch.abs(grad_weight) >= trhld, grad_weight, torch.tensor(0.0).to('cuda'))#.to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
             #if (grad_weight.is_coalesced()):
                 #print (grad_weight.indices().shape)
                 #print ("\n number of nonzero")
+
+            if (layer_type == torch.tensor(0)):
+                SparseGradLinearIntermediate._grad_weight = grad_weight
+            else:
+                SparseGradLinearOutput._grad_weight = grad_weight
+                
+                
         if bias is not None and ctx.needs_input_grad[2]:
             grad_bias = grad_output
             
@@ -162,6 +202,11 @@ class SparseGradLinearIntermediate(torch.nn.Module):
     __constants__ = ['in_features', 'out_features']
     _U = {}
     _V = {}
+    _out_grads = []
+    _acts = []
+    _weight = []
+    _grad_weight = []
+    
 
     @property
     def U(self):
@@ -214,7 +259,6 @@ class SparseGradLinearIntermediate(torch.nn.Module):
         
         
     def forward(self, x):
-        # self.acts = x@self.U.T
         return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(0))
     
     
@@ -226,6 +270,10 @@ class SparseGradLinearOutput(torch.nn.Module):
         
     _U = {}
     _V = {}
+    _out_grads = []
+    _acts = []
+    _weight = []
+    _grad_weight = []
 
     @property
     def U(self):
@@ -265,8 +313,7 @@ class SparseGradLinearOutput(torch.nn.Module):
             self.weight = torch.nn.Parameter(linear.weight.data)
          
         self.bias = torch.nn.Parameter(linear.bias.data.clone()) if linear.bias is not None else None
-        #self.U = tuple_UV[0]
-        #self.VT = tuple_UV[1]
+       
         SparseGradLinearOutput.set_UV(tuple_UV)
         self.weight = torch.nn.Parameter(SparseGradLinearOutput._VT.T@self.weight@SparseGradLinearOutput._U.T)   
         
@@ -278,7 +325,6 @@ class SparseGradLinearOutput(torch.nn.Module):
         
         
     def forward(self, x):
-        # self.acts = x@self.U.T
         return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(1))
 
             

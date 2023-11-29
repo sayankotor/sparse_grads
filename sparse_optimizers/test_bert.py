@@ -94,7 +94,7 @@ training_args1 = TrainingArguments(
 
 training_args2 = TrainingArguments(
     learning_rate=2e-5,
-    num_train_epochs=1,
+    num_train_epochs=3,
     evaluation_strategy="steps",
     skip_memory_metrics = False,
     eval_steps=100,
@@ -123,8 +123,7 @@ if args.sparse_grad:
         pickle.dump(UV_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     torch.cuda.synchronize()
     print("Memory after pre-training sparse grad: {} MB".format( \
-            torch.cuda.max_memory_allocated(args.cuda)/1024./1024.))
-    
+            torch.cuda.max_memory_allocated(args.cuda)/1024./1024.)) 
     model = sparse_grad_linear(model, UV_dict)
     torch.cuda.synchronize()
     print("Memory after re-creating model: {} MB".format( \

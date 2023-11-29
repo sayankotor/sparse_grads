@@ -86,7 +86,6 @@ if is_accelerate_available():
             save_fsdp_optimizer,
         )
 
-
 def Tucker_Decomposition(tensor):
     n1, n2, n3 = tensor.shape
     u1, _, _ = torch.svd(torch.reshape(tensor, (n1, -1)))
@@ -111,13 +110,13 @@ class TrainerBert1(Trainer):
         loss.backward()
         self.n_steps += 1
         for layer in range(12):  
-            if (len(self.grads1)) < 360:
+            if (len(self.grads1)) < 480:
                 cur_grad = model.bert.encoder.layer[layer].output.dense.weight.grad
-                self.grads1.append(torch.empty_like(cur_grad).copy_(cur_grad))
+                self.grads1.append(torch.empty_like(cur_grad).copy_(cur_grad).requires_grad_(requires_grad=False))
 
-            if (len(self.grads2)) < 360:
+            if (len(self.grads2)) < 480:
                 cur_grad = model.bert.encoder.layer[layer].intermediate.dense.weight.grad
-                self.grads2.append(torch.empty_like(cur_grad).copy_(cur_grad))
+                self.grads2.append(torch.empty_like(cur_grad).copy_(cur_grad).requires_grad_(requires_grad=False))
                 
 
             else:              
@@ -150,17 +149,18 @@ class TrainerBert1(Trainer):
         self.losses.append(loss.cpu().detach().numpy())
         return loss.detach()
                     
-                    
+PATH_TO_SAVE = '/home/jovyan/sparse_grads/sparse_optimizers/stsb'                  
                     
 class TrainerBert2(Trainer):
     
-    def make_grad_bank(self, show_acts = False, show_out_grads = False, show_wgrads = False):
+    def make_grad_bank(self, show_acts = False, show_out_grads = False, show_wgrads = False, show_weight = False):
         self.n_show = 3
         self.losses = []
         self.n_steps = 0
         self.show_acts = show_acts
         self.show_out_grads = show_out_grads
         self.show_wgrads = show_wgrads
+        self.show_weight = show_weight
     
     def training_step(self, model, inputs):
         model.train()
@@ -169,96 +169,95 @@ class TrainerBert2(Trainer):
             loss = self.compute_loss(model, inputs)
         loss.backward()
         self.n_steps += 1
-        if  (self.n_steps == 10 or self.n_steps == 200):
+
+        if  (self.n_steps == 10 or self.n_steps == 500 or self.n_steps == 1000 or self.n_steps == 3000):
             
             if (self.show_out_grads):
                 print ("\n\n n_step ", self.n_steps)
-                for layer in range(12):
-                    print ("\n\n layer", layer)
-                    #im= plt.imshow(model.bert.encoder.layer[layer].output.dense.out_grads[0][0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
-                    a = model.bert.encoder.layer[layer].output.dense.out_grads[0,:50, :50].cpu().detach().numpy()
-                    #plt.hist(abs(a), bins = 50)
-                    s= abs(np.concatenate(a))
-                    s = np.sort(s)[::-1]
-                    s = s/s[0]
-                    plt.plot(s)
+                for layer in [2]:
+                    print ("\n\n layer", layer, model.bert.encoder.layer[layer].output.dense._out_grads[0,:50, :50])
+                    im= plt.imshow(model.bert.encoder.layer[layer].output.dense._out_grads[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    torch.save(model.bert.encoder.layer[layer].output.dense._out_grads.cpu().detach(), 'tensor step '+ str(self.n_steps)+ 'layer' + str(layer) +'.pt')
                     
-                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " out output grads.png")
-                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' out output grads.png'
+                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + "out_grads.png")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + 'out_grads.png'
                     #plt.colorbar(im) #not in spy
-                    #plt.savefig("/notebook/compression/exps/sharing/out_grads_100_200/"+name)
+                    plt.savefig(PATH_TO_SAVE + "/out_grads/" + name)
                     plt.show()
 
-                    #a = plt.imshow(model.bert.encoder.layer[layer].intermediate.dense.out_grads[0][0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
-                    a = model.bert.encoder.layer[layer].intermediate.dense.out_grads[0,:50, :50].cpu().detach().numpy()
-                    s= abs(np.concatenate(a))
-                    s = np.sort(s)[::-1]
-                    s = s/s[0]
-                    plt.plot(s)
-                    #plt.hist(abs(a), bins = 50)
-                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate output grads.png")
+                    im = plt.imshow(model.bert.encoder.layer[layer].intermediate.dense._out_grads[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate out grads.png")
                     #plt.colorbar(im) #not in spy
-                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate output grads'
-                    #plt.savefig("/notebook/compression/exps/sharing/out_grads_100_200/"+name)
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate out grads.png'
+                    plt.savefig(PATH_TO_SAVE + "/out_grads/" + name)
                     plt.show()
                 print ("\n\n")
             
             if (self.show_acts):
                 print ("\n\n n_step ", self.n_steps)
-                for layer in range(12):
-                    print ("\n\n layer", layer)
-                    #im= plt.imshow(model.bert.encoder.layer[layer].output.dense.acts[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
-                    a = model.bert.encoder.layer[layer].output.dense.acts[0,:50, :50].cpu().detach().numpy()
-                    s= abs(np.concatenate(a))
-                    s = np.sort(s)[::-1]
-                    s = s/s[0]
-                    plt.plot(s)
-                    #plt.hist(abs(a), bins = 50)
+                for layer in [2]:
+                    print ("\n\n layer", layer, model.bert.encoder.layer[layer].output.dense._acts.shape)
+                    im= plt.imshow(model.bert.encoder.layer[layer].output.dense._acts[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
                     plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " output activations.png")
                     name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' output activations.png'
                     #plt.colorbar(im) #not in spy
-                    #plt.savefig("/notebook/compression/exps/sharing/acts_100_200/"+name)
+                    plt.savefig(PATH_TO_SAVE + "/acts/" + name)
                     plt.show()
 
-                    #im= plt.imshow(model.bert.encoder.layer[layer].intermediate.dense.acts[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
-                    a = model.bert.encoder.layer[layer].intermediate.dense.acts[0,:50, :50].cpu().detach().numpy()
-                    s= abs(np.concatenate(a))
-                    s = np.sort(s)[::-1]
-                    s = s/s[0]
-                    plt.plot(s)
-                    #plt.hist(abs(a), bins = 50)
+                    im= plt.imshow(model.bert.encoder.layer[layer].intermediate.dense._acts[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
                     plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate activations.png")
-                    #plt.colorbar(im) #not in spy
                     name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate activations'
-                    #plt.savefig("/notebook/compression/exps/sharing/acts_100_200/"+name)
+                    plt.savefig(PATH_TO_SAVE + "/acts/"+name)
                     plt.show()
                 print ("\n\n")
-                
-                
-            if (self.show_wgrads):
+
+            if (self.show_weight):
                 print ("\n\n n_step ", self.n_steps)
-                for layer in range(12):
-                    print ("\n\n layer", layer)
-                    #im= plt.imshow(model.bert.encoder.layer[layer].output.dense.acts[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
-                    a = model.bert.encoder.layer[layer].output.dense.weight.grad[:50, :50].cpu().detach().numpy()
-                    im = plt.imshow(aa,cmap='jet', aspect='auto')
-                    plt.title('step ' + ' layer(bert module) w grads.png')
-                    plt.colorbar(im) #not in spy
-                    #plt.savefig("/notebook/compression/exps/sharing/acts_100_200/"+name)
+                for layer in [1, 5, 11]:
+                    im= plt.imshow(model.bert.encoder.layer[layer].output.dense._weight[:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " output activations.png")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' output activations.png'
+                    #plt.colorbar(im) #not in spy
+                    plt.savefig(PATH_TO_SAVE + "/weight/" + name)
                     plt.show()
 
-                    #im= plt.imshow(model.bert.encoder.layer[layer].intermediate.dense.acts[0,:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
-                    a = model.bert.encoder.layer[layer].intermediate.dense.weight.grad[:50, :50].cpu().detach().numpy()
-                    s= abs(np.concatenate(a))
-                    s = np.sort(s)[::-1]
-                    s = s/s[0]
-                    plt.plot(s)
-                    #plt.hist(abs(a), bins = 50)
-                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate w grads.png")
-                    #plt.colorbar(im) #not in spy
-                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate w grads'
-                    #plt.savefig("/notebook/compression/exps/sharing/acts_100_200/"+name)
+                    im= plt.imshow(model.bert.encoder.layer[layer].intermediate.dense._weight[:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate activations.png")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate activations'
+                    plt.savefig(PATH_TO_SAVE + "/weight/"+name)
                     plt.show()
+                print ("\n\n")
+
+                   
+            if (self.show_wgrads):
+                print ("\n\n n_step ", self.n_steps)
+                for layer in [5]:
+                    im= plt.imshow(model.bert.encoder.layer[layer].output.dense._grad_weight[:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    #plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " dense weight grad.pdf")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' dense weight grad.pdf'
+                    #plt.colorbar(im) #not in spy
+                    plt.savefig(PATH_TO_SAVE + "/weight_grads/" + name, format="pdf", bbox_inches="tight")
+                    plt.show()
+
+                    im= plt.imshow(model.bert.encoder.layer[layer].output.dense.weight.grad[:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    #plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " dense weight grad.pdf")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' dense weight grad.pdf'
+                    #plt.colorbar(im) #not in spy
+                    plt.savefig(PATH_TO_SAVE + "/reg_weight_grads/" + name, format="pdf", bbox_inches="tight")
+                    plt.show()
+
+                    im= plt.imshow(model.bert.encoder.layer[layer].intermediate.dense._grad_weight[:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    #plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate weight grad.pdf")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate weight grad.pdf'
+                    plt.savefig(PATH_TO_SAVE + "/weight_grads/"+name, format="pdf", bbox_inches="tight")
+                    plt.show()
+
+                    im= plt.imshow(model.bert.encoder.layer[layer].intermediate.dense.weight.grad[:50, :50].cpu().detach().numpy(), cmap='jet', aspect='auto')#not in spy
+                    #plt.title('step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + " intermediate weight grad.pdf")
+                    name = 'step '+ str(self.n_steps) + ' layer(bert module) ' + str(layer) + ' intermediate weight grad.pdf'
+                    plt.savefig(PATH_TO_SAVE + "/reg_weight_grads/"+name, format="pdf", bbox_inches="tight")
+                    plt.show()
+                print ("\n\n")
                 print ("\n\n")
                                       
         self.losses.append(loss.cpu().detach().numpy())
@@ -284,10 +283,13 @@ def get_parameter_names(model, forbidden_layer_types):
 class TrainerDoubleOpt(Trainer):
     
     
-    def make_grad_bank(self):
+    def make_grad_bank(self, show_out_grads = False, show_acts = False, show_wgrads = False):
         self.n_show = 3
         self.losses = []
         self.n_steps = 0
+        self.show_acts = show_acts
+        self.show_out_grads = show_out_grads
+        self.show_wgrads = show_wgrads
     
     def training_step(self, model, inputs):
         model.train()
@@ -295,7 +297,9 @@ class TrainerDoubleOpt(Trainer):
         inputs = self._prepare_inputs(inputs)
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs)
-        loss.backward()    
+        loss.backward() 
+
+        self.n_steps += 1
                     
         self.losses.append(loss.cpu().detach().numpy())
         return loss.detach()
@@ -703,11 +707,11 @@ class TrainerDoubleOpt(Trainer):
                                 amp.master_params(self.optimizer),
                                 args.max_grad_norm,
                             )
-                        else:
-                            self.accelerator.clip_grad_norm_(
-                                model.parameters(),
-                                args.max_grad_norm,
-                            )
+                        #else:
+                            #self.accelerator.clip_grad_norm_(
+                                #model.parameters(),
+                                #args.max_grad_norm,
+                            #)
 
                     # Optimizer step
                     optimizer_was_run = True

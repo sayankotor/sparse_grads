@@ -12,6 +12,7 @@ def sparse_grad_linear(model, UV_dict):
     print ("created bert with sparse grads")
     return model
 
+
 def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
     task_to_keys = {
     "cola": ("sentence", None),
@@ -26,23 +27,37 @@ def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
     }
     sentence1_key, sentence2_key = task_to_keys[dset_type]
 
+    def convert_to_stsb_features(example_batch):
+        inputs = list(zip(example_batch['sentence1'], example_batch['sentence2']))
+        features = tokenizer.batch_encode_plus(
+            inputs, max_length=128, truncation=True, padding="max_length")
+        features["labels"] = example_batch["label"]
+        return features
+
     def preprocess_function(examples):
             # Tokenize the texts
             args = (
                 (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
             )
-
+            print ('args',*args) 
 
             result = tokenizer.batch_encode_plus(*args, max_length=128, truncation=True, padding="max_length")
 
             result["label"] = examples["label"]
             return result
 
-    tokenized_dataset = raw_dataset.map(
-                preprocess_function,
-                batched=True,
-                load_from_cache_file=False
-            )  
+    if (dset_type == 'stsb'):
+        tokenized_dataset = raw_dataset.map(
+            convert_to_stsb_features,
+            batched=True,
+            load_from_cache_file=False,
+            )
+    else:    
+        tokenized_dataset = raw_dataset.map(
+                    preprocess_function,
+                    batched=True,
+                    load_from_cache_file=False
+                )  
     return tokenized_dataset
 
 
