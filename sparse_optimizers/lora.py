@@ -358,7 +358,7 @@ if __name__ == '__main__':
 
     random_seeds = [42, 3705, 2023, 7, 3612]
 
-    log_dir = './logs'
+    log_dir = './logs/lora'
 
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
