@@ -111,11 +111,11 @@ class TrainerBert1(Trainer):
         self.n_steps += 1
         for layer in range(12):  
             if (len(self.grads1)) < 480:
-                cur_grad = model.bert.encoder.layer[layer].output.dense.weight.grad
+                cur_grad = model.roberta.encoder.layer[layer].output.dense.weight.grad
                 self.grads1.append(torch.empty_like(cur_grad).copy_(cur_grad).requires_grad_(requires_grad=False))
 
             if (len(self.grads2)) < 480:
-                cur_grad = model.bert.encoder.layer[layer].intermediate.dense.weight.grad
+                cur_grad = model.roberta.encoder.layer[layer].intermediate.dense.weight.grad
                 self.grads2.append(torch.empty_like(cur_grad).copy_(cur_grad).requires_grad_(requires_grad=False))
                 
 

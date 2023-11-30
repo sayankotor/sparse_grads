@@ -39,7 +39,7 @@ def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
             args = (
                 (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
             )
-            print ('args',*args) 
+            #print ('args',*args) 
 
             result = tokenizer.batch_encode_plus(*args, max_length=128, truncation=True, padding="max_length")
 

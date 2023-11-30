@@ -176,8 +176,8 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
         if ctx.needs_input_grad[1]:
             grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
             #grad_weight = VT.T @ grad_weight  # !!!! HERE change
-            #trhld = torch.topk(torch.flatten(grad_weight), 28000).values[27999]
-            #grad_weight = torch.where(torch.abs(grad_weight) >= trhld, grad_weight, torch.tensor(0.0).to('cuda'))#.to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
+            trhld = torch.topk(torch.flatten(grad_weight), 28000).values[27999]
+            grad_weight = torch.where(torch.abs(grad_weight) >= trhld, grad_weight, torch.tensor(0.0).to('cuda')).to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
             #if (grad_weight.is_coalesced()):
                 #print (grad_weight.indices().shape)
                 #print ("\n number of nonzero")
@@ -331,14 +331,14 @@ class SparseGradLinearOutput(torch.nn.Module):
 
 def replace_bert_layers(model, UV_dict):
     device = model.device
-    if hasattr(model, "bert") and hasattr(model.bert, "encoder"):
-        encoder = model.bert.encoder
+    if hasattr(model, "roberta") and hasattr(model.roberta, "encoder"):
+        encoder = model.roberta.encoder
     elif hasattr(model, "encoder"):
         encoder = model.encoder
     else:
-        raise ValueError("Expected model to have attribute 'encoder' or 'bert.encoder'.")
+        raise ValueError("Expected model to have attribute 'encoder' or 'roberta.encoder'.")
 
-    for i, layer in enumerate(model.bert.encoder.layer):
+    for i, layer in enumerate(model.roberta.encoder.layer):
         token_dim, hidden_dim = layer.intermediate.dense.weight.shape
         #print ("dense")
         #print ("old shape", token_dim, hidden_dim)
@@ -347,7 +347,7 @@ def replace_bert_layers(model, UV_dict):
 
         new_layer.from_linear(layer.intermediate.dense, UV_dict['interm'])
 
-        model.bert.encoder.layer[i].intermediate.dense = new_layer
+        model.roberta.encoder.layer[i].intermediate.dense = new_layer
           
         #print ("new shape", layer.intermediate.dense.weight.shape)
         
@@ -359,7 +359,45 @@ def replace_bert_layers(model, UV_dict):
 
         new_layer.from_linear(layer.output.dense, UV_dict['output'])
 
-        model.bert.encoder.layer[i].output.dense = new_layer
+        model.roberta.encoder.layer[i].output.dense = new_layer
+          
+        #print ("new shape", layer.output.dense.weight.shape)
+        #print ("\n\n")
+        model.to(device)
+    return model
+
+
+def replace_roberta_layers(model, UV_dict):
+    device = model.device
+    if hasattr(model, "roberta") and hasattr(model.roberta, "encoder"):
+        encoder = model.roberta.encoder
+    elif hasattr(model, "encoder"):
+        encoder = model.encoder
+    else:
+        raise ValueError("Expected model to have attribute 'encoder' or 'roberta.encoder'.")
+
+    for i, layer in enumerate(model.roberta.encoder.layer):
+        token_dim, hidden_dim = layer.intermediate.dense.weight.shape
+        #print ("dense")
+        #print ("old shape", token_dim, hidden_dim)
+        
+        new_layer = SparseGradLinearIntermediate(token_dim, hidden_dim)
+
+        new_layer.from_linear(layer.intermediate.dense, UV_dict['interm'])
+
+        model.roberta.encoder.layer[i].intermediate.dense = new_layer
+          
+        #print ("new shape", layer.intermediate.dense.weight.shape)
+        
+        token_dim, hidden_dim = layer.output.dense.weight.shape
+        #print ("output")
+        #print ("old shape", token_dim, hidden_dim)
+        
+        new_layer = SparseGradLinearOutput(token_dim, hidden_dim)
+
+        new_layer.from_linear(layer.output.dense, UV_dict['output'])
+
+        model.roberta.encoder.layer[i].output.dense = new_layer
           
         #print ("new shape", layer.output.dense.weight.shape)
         #print ("\n\n")

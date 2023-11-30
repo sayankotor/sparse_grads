@@ -58,14 +58,14 @@ def trainer_function(model, training_args2, tokenized_dataset, is_sparse_grad = 
 
     #freeze_bert(model)
     if (is_sparse_grad):
-        trainer = TrainerBert2(#TrainerDoubleOpt(
+        trainer = TrainerDoubleOpt(#TrainerDoubleOpt(
             model=model,
             args=training_args2,
             train_dataset=tokenized_dataset["train"],
             eval_dataset=tokenized_dataset["validation"],
             compute_metrics = compute_metrics,
         )
-        trainer.make_grad_bank(show_out_grads = False, show_acts = False, show_weight = False, show_wgrads=True)
+        trainer.make_grad_bank(show_out_grads = False, show_acts = False)
     else:
         trainer = Trainer(
             model=model,
