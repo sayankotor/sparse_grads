@@ -19,7 +19,7 @@ from trainers_custom import TrainerBert1, TrainerBert2, TrainerDoubleOpt
 # Custom needed function
 
 from util_trainer import pre_trainer_function, trainer_function
-from util import get_dataset, sparse_grad_linear
+from utils import get_dataset, sparse_grad_linear
 
 
 # Create argument parser
@@ -107,6 +107,7 @@ training_args2 = TrainingArguments(
     remove_unused_columns=True,
     seed=297104,
     report_to='none',
+    max_grad_norm=None
     )
     
 
