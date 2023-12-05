@@ -164,10 +164,12 @@ def optuna_objective(trial):
 
 
 if __name__ == '__main__':
-    model_path = r"bert-base-uncased"
+    # model_path = r"bert-base-uncased"
+    model_path = r"roberta-base"
     model2replace_modules_path = {'bert-base-uncased': {'output': '/bert/encoder/layer/\d+/output/dense',
                                                         'intermediate': '/bert/encoder/layer/\d+/intermediate/dense'},
-                                  'roberta-base_uncased': '/roberta/encoder/layer/\d+/(output|intermediate)/dense'}
+                                  'roberta-base': {'output': '/roberta/encoder/layer/\d+/output/dense',
+                                                   'intermediate': '/roberta/encoder/layer/\d+/intermediate/dense'}}
     
     dataset_path = 'glue'
     lora_rank = 7
