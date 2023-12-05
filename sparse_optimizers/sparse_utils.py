@@ -21,6 +21,7 @@ def convert_sparse(UV_dict, target_cls, module: torch.nn.Module, path: str):
     return new_module
 
 def convert_model(model, path: str, UV_dict, target_cls):
+    print('Converting these layers to sparse:')
     return map_module(
         model, partial(convert_sparse, UV_dict, target_cls), path)
 

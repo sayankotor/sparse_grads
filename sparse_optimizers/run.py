@@ -18,7 +18,7 @@ from datasets import load_dataset, Value
 from utils import get_dataset, MetricsComputer, get_trainable_parameters
 from lora_utils import convert_model as convert2lora
 from sparse_utils import convert_model as convert2sparse, get_UV_dict
-from sparse_grad_matrix_sparse import SparseGradLinearIntermediate, SparseGradLinearOutput, replace_bert_layers
+from sparse_grad_matrix_sparse import SparseGradLinearIntermediate, SparseGradLinearOutput
 # from trainers_custom import TrainerBert2 as SparseTrainer
 from trainers_custom import TrainerDoubleOpt as SparseTrainer
 
@@ -89,7 +89,9 @@ def make_trainer(model, task, enable_sparse, tokenized_dataset, output_dir, seed
         remove_unused_columns=True,
         seed=seed,
         report_to='none',
-        max_grad_norm=None
+        max_grad_norm=None,
+        lr_scheduler_type='constant',
+        warmup_ratio=0.,
         )
     validation_split_name = 'validation' if 'validation' in tokenized_dataset.keys() else 'validation_matched'
     if enable_sparse:
@@ -166,24 +168,25 @@ def optuna_objective(trial):
 if __name__ == '__main__':
     # model_path = r"bert-base-uncased"
     model_path = r"roberta-base"
+    
     model2replace_modules_path = {'bert-base-uncased': {'output': '/bert/encoder/layer/\d+/output/dense',
                                                         'intermediate': '/bert/encoder/layer/\d+/intermediate/dense'},
                                   'roberta-base': {'output': '/roberta/encoder/layer/\d+/output/dense',
                                                    'intermediate': '/roberta/encoder/layer/\d+/intermediate/dense'}}
     
     dataset_path = 'glue'
-    lora_rank = 7
     
-    # tasks, run =  ['cola', 'mnli', 'mrpc'], 0
     tasks, run =  ['cola',], 0
+    # tasks, run =  ['cola', 'mnli', 'mrpc'], 0
     # tasks, run = ['qnli', 'qqp', 'rte'], 1
     # tasks, run = ['sst2', 'stsb', 'wnli'], 2
 
-    # seed = 34
     max_length = 128
     verbose = True
 
     enable_lora = False
+    lora_rank = 7
+
     enable_sparse = True
 
     task2evalsteps = {
@@ -210,54 +213,57 @@ if __name__ == '__main__':
         'wnli': 'accuracy'
     }
 
-    task2hyperparams = {
-        'cola': {'lr': 4e-5, 'batch_size': 8},
-        'mnli': {'lr': 2e-5, 'batch_size': 8},
-        'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
-        'qnli': {'lr': 4e-5, 'batch_size': 16},
-        'qqp': {'lr': 2e-5, 'batch_size': 16},
-        'rte': {'lr': 3.5e-5, 'batch_size': 8},
-        'sst2': {'lr': 1e-5, 'batch_size': 8},
-        'stsb': {'lr': 2e-5, 'batch_size': 4},
-        'wnli': {'lr': 5e-3, 'batch_size': 32},
-    }
-
-    # random_seeds = [42, 3705, 2023, 7, 3612]
-    random_seeds = [42,]
-
     log_dir = './logs/lora'
 
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
 
     for task in tasks:
-        log_file = os.path.join(log_dir, f'{task}.json')
-        
-        for seed in random_seeds:
-            _, metrics = train(run, model_path, task,
-                enable_lora=enable_lora, enable_sparse=enable_sparse,
-                output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
-                seed=seed, metric_for_best_model=task2metric_for_best_model[task],
-                batch_size=task2hyperparams[task]['batch_size'],
-                eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']),
-                max_length=max_length,
-                lr=task2hyperparams[task]['lr'],
-                num_epoches=1, max_steps=21, lora_rank=lora_rank, verbose=True)
-
-            # if os.path.exists(log_file):
-            #     with open(log_file, 'r') as f:
-            #         logs = json.load(f)
-            # else:
-            #     logs = {}
-
-            # with open(log_file, 'w') as f:
-            #     logs.update({seed: metrics})
-            #     json.dump(logs, f)
+        # # Calculating mean metrics with optimal params 
 
 
-        # study_name = task  # Unique identifier of the study.
-        # storage_name = f"sqlite:///optuna_new.db"
+        # task2hyperparams = {
+        #     'cola': {'lr': 4e-5, 'batch_size': 8},
+        #     'mnli': {'lr': 2e-5, 'batch_size': 8},
+        #     'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
+        #     'qnli': {'lr': 4e-5, 'batch_size': 16},
+        #     'qqp': {'lr': 2e-5, 'batch_size': 16},
+        #     'rte': {'lr': 3.5e-5, 'batch_size': 8},
+        #     'sst2': {'lr': 1e-5, 'batch_size': 8},
+        #     'stsb': {'lr': 2e-5, 'batch_size': 4},
+        #     'wnli': {'lr': 5e-3, 'batch_size': 32},
+        # }
 
-        # study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
-        # study.optimize(optuna_objective, n_trials=40, timeout=60*60*40, n_jobs=1, gc_after_trial=True)
+        # random_seeds = [42, 3705, 2023, 7, 3612]
+        # log_file = os.path.join(log_dir, f'{task}.json')
+        # for seed in random_seeds:
+        #     _, metrics = train(run, model_path, task,
+        #         enable_lora=enable_lora, enable_sparse=enable_sparse,
+        #         output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
+        #         seed=seed, metric_for_best_model=task2metric_for_best_model[task],
+        #         batch_size=task2hyperparams[task]['batch_size'],
+        #         eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']),
+        #         max_length=max_length,
+        #         lr=task2hyperparams[task]['lr'],
+        #         num_epoches=1, max_steps=21, lora_rank=lora_rank, verbose=True)
+
+        #     if os.path.exists(log_file):
+        #         with open(log_file, 'r') as f:
+        #             logs = json.load(f)
+        #     else:
+        #         logs = {}
+
+        #     with open(log_file, 'w') as f:
+        #         logs.update({seed: metrics})
+        #         json.dump(logs, f)
+
+
+        # Finding optimal params
+        seed = 34
+
+        study_name = task  # Unique identifier of the study.
+        storage_name = f"sqlite:///optuna_new.db"
+
+        study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
+        study.optimize(optuna_objective, n_trials=20, timeout=60*60*40, n_jobs=1, gc_after_trial=True)
     

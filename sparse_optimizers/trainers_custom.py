@@ -3,6 +3,7 @@ import torch
 from transformers import Trainer
 import evaluate as ev
 import numpy as np
+import shutil
 
 from transformers import TrainingArguments, Trainer, EvalPrediction
 
@@ -768,8 +769,8 @@ class TrainerDoubleOpt(Trainer):
             # Wait for everyone to get here so we are sur the model has been saved by process 0.
             if is_torch_tpu_available():
                 xm.rendezvous("load_best_model_at_end")
-            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
-                dist.barrier()
+            # elif args.parallel_mode == ParallelMode.DISTRIBUTED:
+            #     dist.barrier()
             elif is_sagemaker_mp_enabled():
                 smp.barrier()
 
