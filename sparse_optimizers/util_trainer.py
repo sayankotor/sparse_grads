@@ -4,7 +4,7 @@ import torch
 
 # Trainers
 from transformers import TrainingArguments, Trainer
-from util import compute_metrics
+from utils import MetricsComputer
 
 # Custom trainers
 from trainers_custom import TrainerBert1, TrainerBert2, TrainerDoubleOpt
@@ -16,7 +16,7 @@ def pre_trainer_function(model, training_args1, tokenized_dataset):
         args=training_args1,
         train_dataset=tokenized_dataset["train"],
         eval_dataset=tokenized_dataset["validation"],
-        compute_metrics = compute_metrics,
+        compute_metrics = MetricsComputer('cola'),
     )
     trainer.make_grad_bank()
     trainer.train()
@@ -42,7 +42,7 @@ def trainer_function(model, training_args2, tokenized_dataset, is_sparse_grad = 
             args=training_args2,
             train_dataset=tokenized_dataset["train"],
             eval_dataset=tokenized_dataset["validation"],
-            compute_metrics = compute_metrics,
+            compute_metrics = MetricsComputer('cola'),
         )
         trainer.make_grad_bank()
     else:
@@ -51,7 +51,7 @@ def trainer_function(model, training_args2, tokenized_dataset, is_sparse_grad = 
             args=training_args2,
             train_dataset=tokenized_dataset["train"],
             eval_dataset=tokenized_dataset["validation"],
-            compute_metrics = compute_metrics,
+            compute_metrics = MetricsComputer('cola'),
         )
         
     train_result = trainer.train()

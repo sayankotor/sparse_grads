@@ -143,11 +143,12 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
         if ctx.needs_input_grad[1]:
             grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
             #grad_weight = VT.T @ grad_weight  # !!!! HERE change
-            #trhld = torch.topk(torch.flatten(grad_weight), 28000).values[26999]
-            grad_weight = torch.where(torch.abs(grad_weight) >= 0.001, grad_weight, torch.tensor(0.0).to('cuda')).to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
-            #if (grad_weight.is_coalesced()):
-                #print (grad_weight.indices().shape)
-                #print ("\n number of nonzero")
+            # print(grad_weight.shape)
+            trhld = torch.topk(torch.abs(torch.flatten(grad_weight)), 28000).values[27999]
+            grad_weight = torch.where(torch.abs(grad_weight) >= trhld, grad_weight, torch.tensor(0.0).to('cuda')).to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
+            # if (grad_weight.is_coalesced()):
+            #     print (grad_weight.indices().shape)
+            #     print ("\n number of nonzero")
         if bias is not None and ctx.needs_input_grad[2]:
             grad_bias = grad_output
             
