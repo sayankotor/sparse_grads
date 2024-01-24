@@ -155,12 +155,12 @@ def train(run, model_path, task, enable_lora, enable_sparse, output_modules_path
 
 
 def optuna_objective(trial):
-    batch_size = trial.suggest_categorical("batch_size", [4, 8, 16, 32])
+    batch_size = trial.suggest_categorical("batch_size", [16, 32])
     lr = trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True)
 
     eval_steps = int(task2evalsteps[task] * 16. / batch_size)
 
-    val_metric, _ = train(run, model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=1, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
+    val_metric, _ = train(run, model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
     return val_metric
 
 
@@ -176,10 +176,12 @@ if __name__ == '__main__':
     
     dataset_path = 'glue'
     
-    tasks, run =  ['cola',], 0
+    # tasks, run =  ['cola',], 0
     # tasks, run =  ['cola', 'mnli', 'mrpc'], 0
     # tasks, run = ['qnli', 'qqp', 'rte'], 1
     # tasks, run = ['sst2', 'stsb', 'wnli'], 2
+
+    tasks, run = ['qqp', 'sst2', 'mnli'], 0
 
     max_length = 128
     verbose = True
@@ -187,7 +189,14 @@ if __name__ == '__main__':
     enable_lora = False
     lora_rank = 7
 
-    enable_sparse = True
+    enable_sparse = False
+
+    if enable_lora:
+        run_type = 'lora'
+    elif enable_sparse:
+        run_type = 'sparse'
+    else:
+        run_type = 'ft'
 
     task2evalsteps = {
         'cola': 100,
@@ -213,7 +222,7 @@ if __name__ == '__main__':
         'wnli': 'accuracy'
     }
 
-    log_dir = './logs/lora'
+    log_dir = f'./logs/{run_type}'
 
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
@@ -261,8 +270,10 @@ if __name__ == '__main__':
         # Finding optimal params
         seed = 34
 
-        study_name = task  # Unique identifier of the study.
-        storage_name = f"sqlite:///optuna_new.db"
+
+
+        study_name = f'{task}_{run_type}'  # Unique identifier of the study.
+        storage_name = f"postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
 
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
         study.optimize(optuna_objective, n_trials=20, timeout=60*60*40, n_jobs=1, gc_after_trial=True)

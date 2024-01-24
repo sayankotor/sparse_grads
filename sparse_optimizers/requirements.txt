@@ -1,7 +1,9 @@
 accelerate==0.21
-datasets==2.13.2
+datasets
+#==2.13.2
 evaluate==0.4.1
 optuna
 optuna-dashboard
 peft==0.5.0
+psycopg2-binary
 transformers==4.30.2
