@@ -1,0 +1,19 @@
+name: sparse_grad
+channels:
+dependencies:
+  - python==3.10.6
+  - ipython
+  - pip
+  - pip:
+    - torch
+    - numpy
+    - scipy
+    - accelerate==0.21
+    - datasets
+    - matplotlib
+    - evaluate==0.4.1
+    - optuna
+    - optuna-dashboard
+    - peft==0.5.0
+    - psycopg2-binary
+    - transformers==4.30.2

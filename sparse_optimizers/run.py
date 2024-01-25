@@ -3,6 +3,8 @@ import os
 import json
 from pathlib import Path
 import numpy as np
+import uuid
+import argparse
 
 import torch
 
@@ -113,12 +115,14 @@ def make_trainer(model, task, enable_sparse, tokenized_dataset, output_dir, seed
 
     return trainer
 
-def train(run, model_path, task, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
+def train(model_path, task, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
     tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
     model, trainable_params, lora_params, all_param = make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, num_labels, lora_rank, verbose=verbose)
     model = model.to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
-    checkpoint_dir = str(Path('model') / f'checkpt_{run}')
+    checkpt_name = uuid.uuid4().hex
+    checkpoint_dir = str(Path('model') / f'checkpt_{checkpt_name}')
+    
 
     trainer = make_trainer(model, task, enable_sparse, tokenized_dataset, checkpoint_dir, seed, eval_steps=eval_steps, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
     
@@ -143,6 +147,8 @@ def train(run, model_path, task, enable_lora, enable_sparse, output_modules_path
     print("Peak memory usage: {} MB".format( \
             peak_mem_bytes/1024./1024.))
 
+    os.remove(checkpt_path)
+
     metrics = {'train': train_result.metrics,
                'val': eval_result,
                'end_mem_bytes': end_mem_bytes,
@@ -160,14 +166,24 @@ def optuna_objective(trial):
 
     eval_steps = int(task2evalsteps[task] * 16. / batch_size)
 
-    val_metric, _ = train(run, model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
+    val_metric, _ = train(model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
     return val_metric
 
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--task', type=str, required=True)
+    parser.add_argument('--run_type', type=str, required=True)
+    parser.add_argument('--model_path', type=str, required=True)
+    parser.add_argument('-optimize', action='store_true')
+
+
+    args = parser.parse_args()
+    
     # model_path = r"bert-base-uncased"
-    model_path = r"roberta-base"
+    # model_path = r"roberta-base"
+    model_path = args.model_path
     
     model2replace_modules_path = {'bert-base-uncased': {'output': '/bert/encoder/layer/\d+/output/dense',
                                                         'intermediate': '/bert/encoder/layer/\d+/intermediate/dense'},
@@ -176,27 +192,30 @@ if __name__ == '__main__':
     
     dataset_path = 'glue'
     
-    # tasks, run =  ['cola',], 0
-    # tasks, run =  ['cola', 'mnli', 'mrpc'], 0
-    # tasks, run = ['qnli', 'qqp', 'rte'], 1
-    # tasks, run = ['sst2', 'stsb', 'wnli'], 2
+    # tasks, run =  ['cola', 'mnli', 'mrpc']
+    # tasks, run = ['qnli', 'qqp', 'rte']
+    # tasks, run = ['sst2', 'stsb', 'wnli']
 
-    tasks, run = ['qqp', 'sst2', 'mnli'], 0
+    task = args.task
 
     max_length = 128
     verbose = True
 
-    enable_lora = False
     lora_rank = 7
 
-    enable_sparse = False
+    run_type = args.run_type
 
-    if enable_lora:
-        run_type = 'lora'
-    elif enable_sparse:
-        run_type = 'sparse'
+    if run_type == 'lora':
+        enable_lora = True
+        enable_sparse = False
+    elif run_type == 'sparse':
+        enable_lora = False
+        enable_sparse = True
+    elif run_type == 'ft':
+        enable_lora = False
+        enable_sparse = False
     else:
-        run_type = 'ft'
+        raise ValueError('Wrong run_type')
 
     task2evalsteps = {
         'cola': 100,
@@ -227,54 +246,50 @@ if __name__ == '__main__':
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
 
-    for task in tasks:
-        # # Calculating mean metrics with optimal params 
-
-
-        # task2hyperparams = {
-        #     'cola': {'lr': 4e-5, 'batch_size': 8},
-        #     'mnli': {'lr': 2e-5, 'batch_size': 8},
-        #     'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
-        #     'qnli': {'lr': 4e-5, 'batch_size': 16},
-        #     'qqp': {'lr': 2e-5, 'batch_size': 16},
-        #     'rte': {'lr': 3.5e-5, 'batch_size': 8},
-        #     'sst2': {'lr': 1e-5, 'batch_size': 8},
-        #     'stsb': {'lr': 2e-5, 'batch_size': 4},
-        #     'wnli': {'lr': 5e-3, 'batch_size': 32},
-        # }
-
-        # random_seeds = [42, 3705, 2023, 7, 3612]
-        # log_file = os.path.join(log_dir, f'{task}.json')
-        # for seed in random_seeds:
-        #     _, metrics = train(run, model_path, task,
-        #         enable_lora=enable_lora, enable_sparse=enable_sparse,
-        #         output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
-        #         seed=seed, metric_for_best_model=task2metric_for_best_model[task],
-        #         batch_size=task2hyperparams[task]['batch_size'],
-        #         eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']),
-        #         max_length=max_length,
-        #         lr=task2hyperparams[task]['lr'],
-        #         num_epoches=1, max_steps=21, lora_rank=lora_rank, verbose=True)
-
-        #     if os.path.exists(log_file):
-        #         with open(log_file, 'r') as f:
-        #             logs = json.load(f)
-        #     else:
-        #         logs = {}
-
-        #     with open(log_file, 'w') as f:
-        #         logs.update({seed: metrics})
-        #         json.dump(logs, f)
-
-
+    if args.optimize:
         # Finding optimal params
         seed = 34
 
-
-
         study_name = f'{task}_{run_type}'  # Unique identifier of the study.
-        storage_name = f"postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
+        storage_name = f"sqlite:///sparse-grad.db"
 
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
         study.optimize(optuna_objective, n_trials=20, timeout=60*60*40, n_jobs=1, gc_after_trial=True)
+    else:
+        # # Calculating mean metrics with optimal params 
+
+        task2hyperparams = {
+            'cola': {'lr': 4e-5, 'batch_size': 8},
+            'mnli': {'lr': 2e-5, 'batch_size': 8},
+            'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
+            'qnli': {'lr': 4e-5, 'batch_size': 16},
+            'qqp': {'lr': 2e-5, 'batch_size': 16},
+            'rte': {'lr': 3.5e-5, 'batch_size': 8},
+            'sst2': {'lr': 1e-5, 'batch_size': 8},
+            'stsb': {'lr': 2e-5, 'batch_size': 4},
+            'wnli': {'lr': 5e-3, 'batch_size': 32},
+        }
+
+        random_seeds = [42, 3705, 2023, 7, 3612]
+        log_file = os.path.join(log_dir, f'{task}.json')
+        for seed in random_seeds:
+            _, metrics = train(model_path, task,
+                enable_lora=enable_lora, enable_sparse=enable_sparse,
+                output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
+                seed=seed, metric_for_best_model=task2metric_for_best_model[task],
+                batch_size=task2hyperparams[task]['batch_size'],
+                eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']),
+                max_length=max_length,
+                lr=task2hyperparams[task]['lr'],
+                num_epoches=1, max_steps=21, lora_rank=lora_rank, verbose=True)
+
+            if os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    logs = json.load(f)
+            else:
+                logs = {}
+
+            with open(log_file, 'w') as f:
+                logs.update({seed: metrics})
+                json.dump(logs, f)
     
