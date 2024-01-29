@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import uuid
 import argparse
+from shutil import rmtree
 
 import torch
 
@@ -147,7 +148,7 @@ def train(model_path, task, enable_lora, enable_sparse, output_modules_path, int
     print("Peak memory usage: {} MB".format( \
             peak_mem_bytes/1024./1024.))
 
-    os.remove(checkpt_path)
+    rmtree(checkpoint_dir)
 
     metrics = {'train': train_result.metrics,
                'val': eval_result,
@@ -250,11 +251,11 @@ if __name__ == '__main__':
         # Finding optimal params
         seed = 34
 
-        study_name = f'{task}_{run_type}'  # Unique identifier of the study.
+        study_name = f'{task}_{run_type}_{model_path}'  # Unique identifier of the study.
         storage_name = f"sqlite:///sparse-grad.db"
 
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
-        study.optimize(optuna_objective, n_trials=20, timeout=60*60*40, n_jobs=1, gc_after_trial=True)
+        study.optimize(optuna_objective, n_trials=20, timeout=60*60*24*3, n_jobs=1, gc_after_trial=True)
     else:
         # # Calculating mean metrics with optimal params 
 
