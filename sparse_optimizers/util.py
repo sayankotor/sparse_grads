@@ -1,4 +1,4 @@
-from sparse_grad_matrix_sparse import Tucker_Decomposition, replace_bert_layers
+from sparse_grad_matrix_sparse_new import Tucker_Decomposition, replace_bert_layers
 import torch
 
 from transformers import EvalPrediction
@@ -30,7 +30,7 @@ def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
     def convert_to_stsb_features(example_batch):
         inputs = list(zip(example_batch['sentence1'], example_batch['sentence2']))
         features = tokenizer.batch_encode_plus(
-            inputs, max_length=128, truncation=True, padding="max_length")
+            inputs, max_length=512, truncation=True, padding="max_length")
         features["labels"] = example_batch["label"]
         return features
 
@@ -39,8 +39,6 @@ def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
             args = (
                 (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
             )
-            print ('args',*args) 
-
             result = tokenizer.batch_encode_plus(*args, max_length=128, truncation=True, padding="max_length")
 
             result["label"] = examples["label"]
