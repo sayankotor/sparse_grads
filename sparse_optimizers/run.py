@@ -259,30 +259,102 @@ if __name__ == '__main__':
     else:
         # # Calculating mean metrics with optimal params 
 
-        task2hyperparams = {
-            'cola': {'lr': 4e-5, 'batch_size': 8},
-            'mnli': {'lr': 2e-5, 'batch_size': 8},
-            'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
-            'qnli': {'lr': 4e-5, 'batch_size': 16},
-            'qqp': {'lr': 2e-5, 'batch_size': 16},
-            'rte': {'lr': 3.5e-5, 'batch_size': 8},
-            'sst2': {'lr': 1e-5, 'batch_size': 8},
-            'stsb': {'lr': 2e-5, 'batch_size': 4},
-            'wnli': {'lr': 5e-3, 'batch_size': 32},
+        task2hyperparams = \
+        {
+            'bert-base-uncased':
+            {
+                'ft': 
+                    {
+                        'cola': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'qnli': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 1.33e-5, 'batch_size': 16},
+                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': -1, 'batch_size': -1},
+                    },
+                'lora':
+                    {
+                        'cola': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'qnli': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 4.07e-5, 'batch_size': 32},
+                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': -1, 'batch_size': -1},
+                    },
+                'sparse':
+                    {
+                        'cola': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'qnli': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 1.47e-5, 'batch_size': 32},
+                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': -1, 'batch_size': -1},
+                    }
+            },
+            'roberta-base':
+            {
+                'ft': 
+                    {
+                        'cola': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'qnli': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 1.02e-5, 'batch_size': 32},
+                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': -1, 'batch_size': -1},
+                    }, 
+                'lora':
+                    {
+                        'cola': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'qnli': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 1.49e-5, 'batch_size': 32},
+                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': -1, 'batch_size': -1},
+                    }, 
+                'sparse':
+                    {
+                        'cola': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'qnli': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 2.30e-5, 'batch_size': 32},
+                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': -1, 'batch_size': -1},
+                    }
+            }
         }
 
-        random_seeds = [42, 3705, 2023, 7, 3612]
+        hyperparams = task2hyperparams[model_path][run_type][task]
+
+        random_seeds = [42, 3705, 2023]
         log_file = os.path.join(log_dir, f'{task}.json')
         for seed in random_seeds:
             _, metrics = train(model_path, task,
                 enable_lora=enable_lora, enable_sparse=enable_sparse,
                 output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
                 seed=seed, metric_for_best_model=task2metric_for_best_model[task],
-                batch_size=task2hyperparams[task]['batch_size'],
-                eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']),
+                batch_size=hyperparams['batch_size'],
+                eval_steps=int(task2evalsteps[task] * 16. / hyperparams['batch_size']),
                 max_length=max_length,
-                lr=task2hyperparams[task]['lr'],
-                num_epoches=1, max_steps=21, lora_rank=lora_rank, verbose=True)
+                lr=hyperparams['lr'],
+                num_epoches=20, max_steps=-1, lora_rank=lora_rank, verbose=True)
 
             if os.path.exists(log_file):
                 with open(log_file, 'r') as f:
