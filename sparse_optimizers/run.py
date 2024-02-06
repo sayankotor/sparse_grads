@@ -255,7 +255,7 @@ if __name__ == '__main__':
         storage_name = "postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
 
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
-        study.optimize(optuna_objective, n_trials=10, timeout=60*60*24*3, n_jobs=1, gc_after_trial=True)
+        study.optimize(optuna_objective, n_trials=40, timeout=60*60*24*10, n_jobs=1, gc_after_trial=True)
     else:
         # # Calculating mean metrics with optimal params 
 
