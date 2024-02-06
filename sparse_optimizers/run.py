@@ -266,10 +266,10 @@ if __name__ == '__main__':
                 'ft': 
                     {
                         'cola': {'lr': -1, 'batch_size': -1},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.51e-5, 'batch_size': 32},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 5.11e-6, 'batch_size': 16},
                         'rte': {'lr': -1, 'batch_size': -1},
                         'sst2': {'lr': 1.33e-5, 'batch_size': 16},
                         'stsb': {'lr': -1, 'batch_size': -1},
@@ -278,10 +278,10 @@ if __name__ == '__main__':
                 'lora':
                     {
                         'cola': {'lr': -1, 'batch_size': -1},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.00e-5, 'batch_size': 16},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 9.25e-6, 'batch_size': 32},
                         'rte': {'lr': -1, 'batch_size': -1},
                         'sst2': {'lr': 4.07e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
@@ -290,10 +290,10 @@ if __name__ == '__main__':
                 'sparse':
                     {
                         'cola': {'lr': -1, 'batch_size': -1},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 6.07e-6, 'batch_size': 32},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 1.41e-5, 'batch_size': 32},
                         'rte': {'lr': -1, 'batch_size': -1},
                         'sst2': {'lr': 1.47e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
@@ -305,10 +305,10 @@ if __name__ == '__main__':
                 'ft': 
                     {
                         'cola': {'lr': -1, 'batch_size': -1},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.15e-6, 'batch_size':   16},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 7.20e-6, 'batch_size': 32},
                         'rte': {'lr': -1, 'batch_size': -1},
                         'sst2': {'lr': 1.02e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
@@ -317,10 +317,10 @@ if __name__ == '__main__':
                 'lora':
                     {
                         'cola': {'lr': -1, 'batch_size': -1},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.04e-5, 'batch_size': 32},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 5.32e-6, 'batch_size': 16},
                         'rte': {'lr': -1, 'batch_size': -1},
                         'sst2': {'lr': 1.49e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
@@ -329,10 +329,10 @@ if __name__ == '__main__':
                 'sparse':
                     {
                         'cola': {'lr': -1, 'batch_size': -1},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.00e-5, 'batch_size': 32},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 1.40e-5, 'batch_size': 32},
                         'rte': {'lr': -1, 'batch_size': -1},
                         'sst2': {'lr': 2.30e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
