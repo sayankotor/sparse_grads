@@ -265,9 +265,9 @@ if __name__ == '__main__':
             {
                 'ft': 
                     {
-                        'cola': {'lr': -1, 'batch_size': -1},
+                        'cola': {'lr': 1.01e-5, 'batch_size': 16},
                         'mnli': {'lr': 1.51e-5, 'batch_size': 32},
-                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 1.90e-5, 'batch_size': 16},
                         'qnli': {'lr': -1, 'batch_size': -1},
                         'qqp': {'lr': 5.11e-6, 'batch_size': 16},
                         'rte': {'lr': -1, 'batch_size': -1},
@@ -277,9 +277,9 @@ if __name__ == '__main__':
                     },
                 'lora':
                     {
-                        'cola': {'lr': -1, 'batch_size': -1},
+                        'cola': {'lr': 2.60e-5, 'batch_size': 32},
                         'mnli': {'lr': 1.00e-5, 'batch_size': 16},
-                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 3.11e-5, 'batch_size': 16},
                         'qnli': {'lr': -1, 'batch_size': -1},
                         'qqp': {'lr': 9.25e-6, 'batch_size': 32},
                         'rte': {'lr': -1, 'batch_size': -1},
@@ -289,7 +289,7 @@ if __name__ == '__main__':
                     },
                 'sparse':
                     {
-                        'cola': {'lr': -1, 'batch_size': -1},
+                        'cola': {'lr': 3.15e-5, 'batch_size': 32},
                         'mnli': {'lr': 6.07e-6, 'batch_size': 32},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
@@ -304,9 +304,9 @@ if __name__ == '__main__':
             {
                 'ft': 
                     {
-                        'cola': {'lr': -1, 'batch_size': -1},
+                        'cola': {'lr': 1.85e-5, 'batch_size': 32},
                         'mnli': {'lr': 1.15e-6, 'batch_size':   16},
-                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 2.47e-5, 'batch_size': 32},
                         'qnli': {'lr': -1, 'batch_size': -1},
                         'qqp': {'lr': 7.20e-6, 'batch_size': 32},
                         'rte': {'lr': -1, 'batch_size': -1},
@@ -316,9 +316,9 @@ if __name__ == '__main__':
                     }, 
                 'lora':
                     {
-                        'cola': {'lr': -1, 'batch_size': -1},
+                        'cola': {'lr': 3.20e-5, 'batch_size': 32},
                         'mnli': {'lr': 1.04e-5, 'batch_size': 32},
-                        'mrpc': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 7.02e-5, 'batch_size': 32},
                         'qnli': {'lr': -1, 'batch_size': -1},
                         'qqp': {'lr': 5.32e-6, 'batch_size': 16},
                         'rte': {'lr': -1, 'batch_size': -1},
@@ -328,7 +328,7 @@ if __name__ == '__main__':
                     }, 
                 'sparse':
                     {
-                        'cola': {'lr': -1, 'batch_size': -1},
+                        'cola': {'lr': 2.61e-5, 'batch_size': 32},
                         'mnli': {'lr': 1.00e-5, 'batch_size': 32},
                         'mrpc': {'lr': -1, 'batch_size': -1},
                         'qnli': {'lr': -1, 'batch_size': -1},
@@ -344,7 +344,7 @@ if __name__ == '__main__':
         hyperparams = task2hyperparams[model_path][run_type][task]
 
         random_seeds = [42, 3705, 2023]
-        log_file = os.path.join(log_dir, f'{task}.json')
+        log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
         for seed in random_seeds:
             _, metrics = train(model_path, task,
                 enable_lora=enable_lora, enable_sparse=enable_sparse,
