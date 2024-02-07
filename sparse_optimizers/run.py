@@ -273,7 +273,7 @@ if __name__ == '__main__':
                         'rte': {'lr': 3.05e-5, 'batch_size': 32},
                         'sst2': {'lr': 1.33e-5, 'batch_size': 16},
                         'stsb': {'lr': -1, 'batch_size': -1},
-                        'wnli': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': 9.13e-4, 'batch_size': 32},
                     },
                 'lora':
                     {
@@ -285,7 +285,7 @@ if __name__ == '__main__':
                         'rte': {'lr': 3.84e-5, 'batch_size': 16},
                         'sst2': {'lr': 4.07e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
-                        'wnli': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': 1.57e-5, 'batch_size': 32},
                     },
                 'sparse':
                     {
@@ -297,7 +297,7 @@ if __name__ == '__main__':
                         'rte': {'lr': 6.81e-5, 'batch_size': 16},
                         'sst2': {'lr': 1.47e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
-                        'wnli': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': 2.52e-6, 'batch_size': 32},
                     }
             },
             'roberta-base':
@@ -312,7 +312,7 @@ if __name__ == '__main__':
                         'rte': {'lr': 1.74e-5, 'batch_size': 32},
                         'sst2': {'lr': 1.02e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
-                        'wnli': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': 2.34e-5, 'batch_size': 16},
                     }, 
                 'lora':
                     {
@@ -324,7 +324,7 @@ if __name__ == '__main__':
                         'rte': {'lr': 1.61e-5, 'batch_size': 16},
                         'sst2': {'lr': 1.49e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
-                        'wnli': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': 3.11e-5, 'batch_size': 16},
                     }, 
                 'sparse':
                     {
@@ -336,7 +336,7 @@ if __name__ == '__main__':
                         'rte': {'lr': 1.81e-5, 'batch_size': 16},
                         'sst2': {'lr': 2.30e-5, 'batch_size': 32},
                         'stsb': {'lr': -1, 'batch_size': -1},
-                        'wnli': {'lr': -1, 'batch_size': -1},
+                        'wnli': {'lr': 6.48e-5, 'batch_size': 32},
                     }
             }
         }
