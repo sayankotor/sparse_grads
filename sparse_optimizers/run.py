@@ -272,7 +272,7 @@ if __name__ == '__main__':
                         'qqp': {'lr': 5.11e-6, 'batch_size': 16},
                         'rte': {'lr': 3.05e-5, 'batch_size': 32},
                         'sst2': {'lr': 1.33e-5, 'batch_size': 16},
-                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 2.70e-5, 'batch_size': 16},
                         'wnli': {'lr': 9.13e-4, 'batch_size': 32},
                     },
                 'lora':
@@ -284,7 +284,7 @@ if __name__ == '__main__':
                         'qqp': {'lr': 9.25e-6, 'batch_size': 32},
                         'rte': {'lr': 3.84e-5, 'batch_size': 16},
                         'sst2': {'lr': 4.07e-5, 'batch_size': 32},
-                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 1.12e-4, 'batch_size': 32},
                         'wnli': {'lr': 1.57e-5, 'batch_size': 32},
                     },
                 'sparse':
@@ -296,7 +296,7 @@ if __name__ == '__main__':
                         'qqp': {'lr': 1.41e-5, 'batch_size': 32},
                         'rte': {'lr': 6.81e-5, 'batch_size': 16},
                         'sst2': {'lr': 1.47e-5, 'batch_size': 32},
-                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 1.24e-4, 'batch_size': 32},
                         'wnli': {'lr': 2.52e-6, 'batch_size': 32},
                     }
             },
@@ -311,7 +311,7 @@ if __name__ == '__main__':
                         'qqp': {'lr': 7.20e-6, 'batch_size': 32},
                         'rte': {'lr': 1.74e-5, 'batch_size': 32},
                         'sst2': {'lr': 1.02e-5, 'batch_size': 32},
-                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 7.71e-5, 'batch_size': 32},
                         'wnli': {'lr': 2.34e-5, 'batch_size': 16},
                     }, 
                 'lora':
@@ -323,7 +323,7 @@ if __name__ == '__main__':
                         'qqp': {'lr': 5.32e-6, 'batch_size': 16},
                         'rte': {'lr': 1.61e-5, 'batch_size': 16},
                         'sst2': {'lr': 1.49e-5, 'batch_size': 32},
-                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 4.87e-5, 'batch_size': 16},
                         'wnli': {'lr': 3.11e-5, 'batch_size': 16},
                     }, 
                 'sparse':
@@ -335,7 +335,7 @@ if __name__ == '__main__':
                         'qqp': {'lr': 1.40e-5, 'batch_size': 32},
                         'rte': {'lr': 1.81e-5, 'batch_size': 16},
                         'sst2': {'lr': 2.30e-5, 'batch_size': 32},
-                        'stsb': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 1.87e-5, 'batch_size': 16},
                         'wnli': {'lr': 6.48e-5, 'batch_size': 32},
                     }
             }
