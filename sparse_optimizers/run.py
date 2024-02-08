@@ -343,7 +343,8 @@ if __name__ == '__main__':
 
         hyperparams = task2hyperparams[model_path][run_type][task]
 
-        random_seeds = [42, 3705, 2023]
+        # random_seeds = [42, 3705, 2023]
+        random_seeds = [37, 7777]
         log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
         for seed in random_seeds:
             _, metrics = train(model_path, task,
