@@ -11,19 +11,19 @@ from sparse_grad_matrix_sparse import SparseGradLinearIntermediate, Tucker_Decom
 from trainers_custom import TrainerBert1
 
 
-def convert_sparse(UV_dict, target_cls, module: torch.nn.Module, path: str):
+def convert_sparse(UV_dict, target_cls, n_params: int, module: torch.nn.Module, path: str):
     if not isinstance(module, torch.nn.Linear):
         raise ValueError('Only linear layer can be converted: '
                          f'type={type(module)}.')
     token_dim, hidden_dim = module.weight.shape
-    new_module = target_cls(token_dim, hidden_dim)
+    new_module = target_cls(token_dim, hidden_dim, n_params=n_params)
     new_module.from_linear(module, UV_dict)
     return new_module
 
-def convert_model(model, path: str, UV_dict, target_cls):
+def convert_model(model, path: str, UV_dict, target_cls, n_params):
     print('Converting these layers to sparse:')
     return map_module(
-        model, partial(convert_sparse, UV_dict, target_cls), path)
+        model, partial(convert_sparse, UV_dict, target_cls, n_params), path)
 
 
 class SparsePretrainer(Trainer):

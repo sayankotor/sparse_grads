@@ -103,7 +103,9 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
 
         # Note that forward, setseup_context, and backward are @staticmethods
     @staticmethod
-    def forward(ctx, input, weight, bias, treshold, layer_type):
+    def forward(ctx, input, weight, bias, treshold, layer_type, n_params):
+        ctx.n_params = n_params
+
         if (layer_type == torch.tensor(0)):
             U, VT = SparseGradLinearIntermediate._U, SparseGradLinearIntermediate._VT
         else:
@@ -144,7 +146,7 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
             grad_weight = torch.einsum('ijk,kjl->il', grad_output.T, input)#grad_output.T @input
             #grad_weight = VT.T @ grad_weight  # !!!! HERE change
             # print(grad_weight.shape)
-            trhld = torch.topk(torch.abs(torch.flatten(grad_weight)), 28000).values[27999]
+            trhld = torch.topk(torch.abs(torch.flatten(grad_weight)), ctx.n_params).values[ctx.n_params - 1]
             grad_weight = torch.where(torch.abs(grad_weight) >= trhld, grad_weight, torch.tensor(0.0).to('cuda')).to_sparse()  ## возвращаем градиент в каком пространстве?? VERY IMPORTANT
             # if (grad_weight.is_coalesced()):
             #     print (grad_weight.indices().shape)
@@ -152,7 +154,7 @@ class LinearFunctionSparseGrad(torch.autograd.Function):
         if bias is not None and ctx.needs_input_grad[2]:
             grad_bias = grad_output
             
-        return grad_input, grad_weight, grad_bias, None, None
+        return grad_input, grad_weight, grad_bias, None, None, None
             
         #return grad_input, grad_weight, grad_bias, None, None, None
 
@@ -177,7 +179,7 @@ class SparseGradLinearIntermediate(torch.nn.Module):
         SparseGradLinearIntermediate._U = tuple_UV[0]
         SparseGradLinearIntermediate._VT = tuple_UV[1]
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = True,
+    def __init__(self, in_features: int, out_features: int, n_params: int, bias: bool = True,
                  device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
@@ -193,6 +195,8 @@ class SparseGradLinearIntermediate(torch.nn.Module):
         #self.VT = None
         self.is_sparse = False
         self.acts = None
+
+        self.n_params = n_params
                 
         
     def from_linear(self, linear: nn.Linear, tuple_UV = tuple(), transpose=False):
@@ -216,7 +220,7 @@ class SparseGradLinearIntermediate(torch.nn.Module):
         
     def forward(self, x):
         # self.acts = x@self.U.T
-        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(0))
+        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(0), self.n_params)
     
     
 class SparseGradLinearOutput(torch.nn.Module):
@@ -241,7 +245,7 @@ class SparseGradLinearOutput(torch.nn.Module):
         SparseGradLinearOutput._U = tuple_UV[0]
         SparseGradLinearOutput._VT = tuple_UV[1]
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = True,
+    def __init__(self, in_features: int, out_features: int, n_params: int, bias: bool = True,
                  device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
@@ -257,6 +261,8 @@ class SparseGradLinearOutput(torch.nn.Module):
         #self.VT = None
         self.is_sparse = False
         self.acts = None
+
+        self.n_params = n_params
                 
         
     def from_linear(self, linear: nn.Linear, tuple_UV = tuple(), transpose=False):
@@ -280,7 +286,7 @@ class SparseGradLinearOutput(torch.nn.Module):
         
     def forward(self, x):
         # self.acts = x@self.U.T
-        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(1))
+        return LinearFunctionSparseGrad.apply(x, self.weight, self.bias, self.treshold, torch.tensor(1), self.n_params)
 
             
 
