@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 
 if __name__ == '__main__':
-    tasks = ['cola', 'mnli', 'mrpc', 'qnli', 'rte', 'sst2', 'stsb', 'wnli']
-    # tasks =  ['cola', 'mnli', 'mrpc', 'qnli', 'qqp', 'rte', 'sst2', 'stsb', 'wnli']
-    random_seeds = [42, 3705, 2023]
+    tasks = ['stsb', 'cola', 'mrpc', 'qnli', 'rte', 'sst2', 'wnli']
+    # tasks = ['mnli', 'qqp']
+    # tasks = ['stsb', 'cola', 'mnli', 'mrpc', 'qnli', 'qqp', 'rte', 'sst2', 'wnli']
+    random_seeds = [42, 3705, 2023, 37, 7777]
 
     task2metric_for_best_model = {
         'cola': 'matthews_correlation',
@@ -23,7 +24,7 @@ if __name__ == '__main__':
     log_dir = './logs'
 
 
-    for model_path in ['roberta-base', 'bert-base-uncased']:
+    for model_path in ['bert-base-uncased', 'roberta-base']:
         print('\n\n', model_path)
         for run_type in ['ft', 'lora', 'sparse',]:
             metrics = {}

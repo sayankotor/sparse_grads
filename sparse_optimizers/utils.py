@@ -1,6 +1,7 @@
 import re
 from typing import Callable, Optional
 from functools import wraps
+import uuid
 
 import numpy as np
 import torch
@@ -70,7 +71,7 @@ def get_trainable_parameters(model):
 class MetricsComputer:
     def __init__(self, task):
         self.task = task
-        self.metric = ev.load("glue", task)
+        self.metric = ev.load("glue", task, experiment_id=uuid.uuid4().hex)
 
     def __call__(self, p: EvalPrediction):
             preds_ = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
