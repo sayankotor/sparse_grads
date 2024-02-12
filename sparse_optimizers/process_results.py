@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 
 if __name__ == '__main__':
-    tasks = ['stsb', 'cola', 'mrpc', 'qnli', 'rte', 'sst2', 'wnli']
+    # tasks = ['stsb', 'cola', 'mrpc', 'qnli', 'rte', 'sst2', 'wnli']
     # tasks = ['mnli', 'qqp']
-    # tasks = ['stsb', 'cola', 'mnli', 'mrpc', 'qnli', 'qqp', 'rte', 'sst2', 'wnli']
+    tasks = ['stsb', 'cola', 'mnli', 'mrpc', 'qnli', 'qqp', 'rte', 'sst2', 'wnli']
     random_seeds = [42, 3705, 2023, 37, 7777]
 
     task2metric_for_best_model = {
@@ -39,7 +39,7 @@ if __name__ == '__main__':
                         logs = json.load(f)
 
                     # print(task)
-                    metrics[task] = np.mean([logs[str(seed)]['val'][f'eval_{task2metric_for_best_model[task]}'] for seed in random_seeds])
+                    metrics[task] = np.round(100. * np.mean([logs[str(seed)]['val'][f'eval_{task2metric_for_best_model[task]}'] for seed in random_seeds]), 1)
 
             print(metrics)
-            print(np.mean(list(metrics.values())))
+            print(np.round(np.mean(list(metrics.values())), 1))

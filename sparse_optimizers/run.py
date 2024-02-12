@@ -257,7 +257,8 @@ if __name__ == '__main__':
         seed = 34
 
         study_name = f'{task}_{run_type}_{model_path}'  # Unique identifier of the study.
-        storage_name = "postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
+        # storage_name = "postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
+        storage_name = "postgresql+psycopg2://sparse-grad:BiW7oocu@10.1.3.21:5432/sparse-grad"
 
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
         study.optimize(optuna_objective, n_trials=40, timeout=60*60*24*10, n_jobs=1, gc_after_trial=True)
@@ -342,6 +343,45 @@ if __name__ == '__main__':
                         'sst2': {'lr': 2.30e-5, 'batch_size': 32},
                         'stsb': {'lr': 1.87e-5, 'batch_size': 16},
                         'wnli': {'lr': 6.48e-5, 'batch_size': 32},
+                    }
+            },
+            'roberta-large':
+            {
+                'ft': 
+                    {
+                        'cola': {'lr': 1.06e-5, 'batch_size': 16},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 1.39e-5, 'batch_size': 16},
+                        'qnli': {'lr': 2.35e-6, 'batch_size': 32},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': 6.49e-6, 'batch_size': 16},
+                        'sst2': {'lr': 8.77e-6, 'batch_size': 32},
+                        'stsb': {'lr': 1.11e-5, 'batch_size': 32},
+                        'wnli': {'lr': 1.57e-6, 'batch_size': 16},
+                    }, 
+                'lora':
+                    {
+                        'cola': {'lr': 5.86e-6, 'batch_size': 16},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 4.90e-5, 'batch_size': 32},
+                        'qnli': {'lr': 1.19e-5, 'batch_size': 16},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': 5.05e-5, 'batch_size': 16},
+                        'sst2': {'lr': 5.01e-6, 'batch_size': 16},
+                        'stsb': {'lr': 2.96e-5, 'batch_size': 16},
+                        'wnli': {'lr': 4.14e-5, 'batch_size': 32},
+                    }, 
+                'sparse':
+                    {
+                        'cola': {'lr': 1.27e-5, 'batch_size': 32},
+                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mrpc': {'lr': 1.96e-5, 'batch_size': 16},
+                        'qnli': {'lr': 5.56e-6, 'batch_size': 16},
+                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'rte': {'lr': 2.10e-5, 'batch_size': 32},
+                        'sst2': {'lr': -1, 'batch_size': -1},
+                        'stsb': {'lr': 2.11e-5, 'batch_size': 16},
+                        'wnli': {'lr': 1.32e-6, 'batch_size': 16},
                     }
             }
         }
