@@ -363,7 +363,7 @@ if __name__ == '__main__':
                     {
                         'cola': {'lr': 5.86e-6, 'batch_size': 16},
                         'mnli': {'lr': -1, 'batch_size': -1},
-                        'mrpc': {'lr': 4.90e-5, 'batch_size': 32},
+                        'mrpc': {'lr': 1.56e-5, 'batch_size': 16},
                         'qnli': {'lr': 1.19e-5, 'batch_size': 16},
                         'qqp': {'lr': -1, 'batch_size': -1},
                         'rte': {'lr': 4.17e-5, 'batch_size': 16},
@@ -374,10 +374,10 @@ if __name__ == '__main__':
                 'sparse':
                     {
                         'cola': {'lr': 1.27e-5, 'batch_size': 32},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 4.34e-6, 'batch_size': 32},
                         'mrpc': {'lr': 1.96e-5, 'batch_size': 16},
                         'qnli': {'lr': 5.56e-6, 'batch_size': 16},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 2.89e-6, 'batch_size': 32},
                         'rte': {'lr': 2.10e-5, 'batch_size': 32},
                         'sst2': {'lr': 1.46e-6, 'batch_size': 32},
                         'stsb': {'lr': 2.11e-5, 'batch_size': 16},
