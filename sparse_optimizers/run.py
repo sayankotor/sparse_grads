@@ -351,7 +351,7 @@ if __name__ == '__main__':
                     {
                         'cola': {'lr': 1.06e-5, 'batch_size': 16},
                         'mnli': {'lr': -1, 'batch_size': -1},
-                        'mrpc': {'lr': 1.39e-5, 'batch_size': 16},
+                        'mrpc': {'lr': 6.79e-5, 'batch_size': 16},
                         'qnli': {'lr': 2.35e-6, 'batch_size': 32},
                         'qqp': {'lr': -1, 'batch_size': -1},
                         'rte': {'lr': 6.49e-6, 'batch_size': 16},
@@ -366,7 +366,7 @@ if __name__ == '__main__':
                         'mrpc': {'lr': 4.90e-5, 'batch_size': 32},
                         'qnli': {'lr': 1.19e-5, 'batch_size': 16},
                         'qqp': {'lr': -1, 'batch_size': -1},
-                        'rte': {'lr': 5.05e-5, 'batch_size': 16},
+                        'rte': {'lr': 4.17e-5, 'batch_size': 16},
                         'sst2': {'lr': 5.01e-6, 'batch_size': 16},
                         'stsb': {'lr': 2.96e-5, 'batch_size': 16},
                         'wnli': {'lr': 4.14e-5, 'batch_size': 32},
@@ -388,8 +388,8 @@ if __name__ == '__main__':
 
         hyperparams = task2hyperparams[model_path][run_type][task]
 
-        # random_seeds = [42, 3705, 2023]
-        random_seeds = [37, 7777]
+        random_seeds = [42, 3705, 2023]
+        # random_seeds = [37, 7777]
         log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
         for seed in random_seeds:
             _, metrics = train(model_path, task,
