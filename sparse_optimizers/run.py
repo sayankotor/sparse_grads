@@ -351,7 +351,7 @@ if __name__ == '__main__':
                     {
                         'cola': {'lr': 1.06e-5, 'batch_size': 16},
                         'mnli': {'lr': -1, 'batch_size': -1},
-                        'mrpc': {'lr': 6.79e-5, 'batch_size': 16},
+                        'mrpc': {'lr': 6.79e-6, 'batch_size': 16},
                         'qnli': {'lr': 2.35e-6, 'batch_size': 32},
                         'qqp': {'lr': -1, 'batch_size': -1},
                         'rte': {'lr': 6.49e-6, 'batch_size': 16},
@@ -379,7 +379,7 @@ if __name__ == '__main__':
                         'qnli': {'lr': 5.56e-6, 'batch_size': 16},
                         'qqp': {'lr': -1, 'batch_size': -1},
                         'rte': {'lr': 2.10e-5, 'batch_size': 32},
-                        'sst2': {'lr': -1, 'batch_size': -1},
+                        'sst2': {'lr': 1.46e-6, 'batch_size': 32},
                         'stsb': {'lr': 2.11e-5, 'batch_size': 16},
                         'wnli': {'lr': 1.32e-6, 'batch_size': 16},
                     }
