@@ -350,10 +350,10 @@ if __name__ == '__main__':
                 'ft': 
                     {
                         'cola': {'lr': 1.06e-5, 'batch_size': 16},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.01e-6, 'batch_size': 16},
                         'mrpc': {'lr': 6.79e-6, 'batch_size': 16},
                         'qnli': {'lr': 2.35e-6, 'batch_size': 32},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 4.48e-6, 'batch_size': 32},
                         'rte': {'lr': 6.49e-6, 'batch_size': 16},
                         'sst2': {'lr': 8.77e-6, 'batch_size': 32},
                         'stsb': {'lr': 1.11e-5, 'batch_size': 32},
@@ -362,10 +362,10 @@ if __name__ == '__main__':
                 'lora':
                     {
                         'cola': {'lr': 5.86e-6, 'batch_size': 16},
-                        'mnli': {'lr': -1, 'batch_size': -1},
+                        'mnli': {'lr': 1.09e-6, 'batch_size': 16},
                         'mrpc': {'lr': 1.56e-5, 'batch_size': 16},
                         'qnli': {'lr': 1.19e-5, 'batch_size': 16},
-                        'qqp': {'lr': -1, 'batch_size': -1},
+                        'qqp': {'lr': 1.57e-5, 'batch_size': 32},
                         'rte': {'lr': 4.17e-5, 'batch_size': 16},
                         'sst2': {'lr': 5.01e-6, 'batch_size': 16},
                         'stsb': {'lr': 2.96e-5, 'batch_size': 16},
