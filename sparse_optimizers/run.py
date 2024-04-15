@@ -22,6 +22,7 @@ from utils import get_dataset, MetricsComputer, get_trainable_parameters
 from lora_utils import convert_model as convert2lora
 from sparse_utils import convert_model as convert2sparse, get_UV_dict
 from sparse_grad_matrix_sparse import SparseGradLinearIntermediate, SparseGradLinearOutput
+from meprop import MePropLinearIntermediate, MePropLinearOutput, convert_model as convert2meprop
 # from trainers_custom import TrainerBert2 as SparseTrainer
 from trainers_custom import TrainerDoubleOpt as SparseTrainer
 
@@ -40,7 +41,7 @@ def make_dataset(model_path_name, dataset_path, dataset_name, max_length):
     tokenized_dataset = get_dataset(tokenizer, dataset, dset_type=dataset_name, max_length=max_length)
     return tokenized_dataset, num_labels
 
-def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, num_labels,
+def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, enable_meprop, output_modules_path, intermediate_modules_path, num_labels,
     lora_rank, sparse_n_params, verbose=False):
 
     assert not(enable_lora & enable_sparse)
@@ -66,7 +67,10 @@ def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora,
         UV_dict = get_UV_dict(model, task, output_modules_path, intermediate_modules_path, n_stack_grads=360, tokenized_dataset=tokenized_dataset, lr=lr, batch_size=batch_size, seed=seed, max_steps=11)
         model = convert2sparse(model, output_modules_path, UV_dict['output'], SparseGradLinearOutput, n_params=sparse_n_params)
         model = convert2sparse(model, intermediate_modules_path, UV_dict['interm'], SparseGradLinearIntermediate, n_params=sparse_n_params)
-        # model = replace_bert_layers(model, UV_dict)
+    
+    if enable_meprop:
+        model = convert2meprop(model, output_modules_path, MePropLinearOutput, n_params=sparse_n_params)
+        model = convert2meprop(model, intermediate_modules_path, MePropLinearIntermediate, n_params=sparse_n_params)
 
     return model, trainable_params, lora_params, all_param
 
@@ -116,9 +120,9 @@ def make_trainer(model, task, enable_sparse, tokenized_dataset, output_dir, seed
 
     return trainer
 
-def train(model_path, task, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, sparse_n_params=None, verbose=False):
+def train(model_path, task, enable_lora, enable_sparse, enable_meprop, output_modules_path, intermediate_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, sparse_n_params=None, verbose=False):
     tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
-    model, trainable_params, lora_params, all_param = make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, num_labels, lora_rank, sparse_n_params, verbose=verbose)
+    model, trainable_params, lora_params, all_param = make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, enable_meprop, output_modules_path, intermediate_modules_path, num_labels, lora_rank, sparse_n_params, verbose=verbose)
     model = model.to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
     checkpt_name = uuid.uuid4().hex
@@ -167,7 +171,7 @@ def optuna_objective(trial):
 
     eval_steps = int(task2evalsteps[task] * 16. / batch_size)
 
-    val_metric, _ = train(model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=model2params[model_path]['lora_rank'], sparse_n_params=model2params[model_path]['sparse_n_params'], verbose=verbose)
+    val_metric, _ = train(model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, enable_meprop=enable_meprop, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=model2params[model_path]['lora_rank'], sparse_n_params=model2params[model_path]['sparse_n_params'], verbose=verbose)
     return val_metric
 
 
@@ -214,12 +218,19 @@ if __name__ == '__main__':
     if run_type == 'lora':
         enable_lora = True
         enable_sparse = False
+        enable_meprop = False
     elif run_type == 'sparse':
         enable_lora = False
         enable_sparse = True
+        enable_meprop = False
+    elif run_type == 'meprop':
+        enable_lora = False
+        enable_sparse = False
+        enable_meprop = True
     elif run_type == 'ft':
         enable_lora = False
         enable_sparse = False
+        enable_meprop = False
     else:
         raise ValueError('Wrong run_type')
 
@@ -294,6 +305,18 @@ if __name__ == '__main__':
                         'wnli': {'lr': 1.57e-5, 'batch_size': 32},
                     },
                 'sparse':
+                    {
+                        'cola': {'lr': 3.15e-5, 'batch_size': 32},
+                        'mnli': {'lr': 6.07e-6, 'batch_size': 32},
+                        'mrpc': {'lr': 1.22e-5, 'batch_size': 32},
+                        'qnli': {'lr': 1.94e-5, 'batch_size': 16},
+                        'qqp': {'lr': 1.41e-5, 'batch_size': 32},
+                        'rte': {'lr': 6.81e-5, 'batch_size': 16},
+                        'sst2': {'lr': 1.47e-5, 'batch_size': 32},
+                        'stsb': {'lr': 1.24e-4, 'batch_size': 32},
+                        'wnli': {'lr': 2.52e-6, 'batch_size': 32},
+                    },
+                'meprop':
                     {
                         'cola': {'lr': 3.15e-5, 'batch_size': 32},
                         'mnli': {'lr': 6.07e-6, 'batch_size': 32},
@@ -393,7 +416,7 @@ if __name__ == '__main__':
         log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
         for seed in random_seeds:
             _, metrics = train(model_path, task,
-                enable_lora=enable_lora, enable_sparse=enable_sparse,
+                enable_lora=enable_lora, enable_sparse=enable_sparse, enable_meprop=enable_meprop,
                 output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
                 seed=seed, metric_for_best_model=task2metric_for_best_model[task],
                 batch_size=hyperparams['batch_size'],
