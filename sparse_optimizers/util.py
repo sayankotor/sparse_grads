@@ -1,4 +1,4 @@
-from sparse_grad_matrix_sparse import Tucker_Decomposition, replace_bert_layers
+from sparse_grad_matrix_sparse_new import Tucker_Decomposition, replace_bert_layers, replace_llama_layers
 import torch
 
 from transformers import EvalPrediction
@@ -10,6 +10,13 @@ def sparse_grad_linear(model, UV_dict):
     print ("create bert with sparse grads")
     model = replace_bert_layers(model, UV_dict)
     print ("created bert with sparse grads")
+    return model
+
+
+def sparse_grad_linear_llama(model, UV_dict):
+    print ("create llama with sparse grads")
+    model = replace_llama_layers(model, UV_dict)
+    print ("created llama with sparse grads")
     return model
 
 def get_dataset(tokenizer, raw_dataset, dset_type = 'cola'):
