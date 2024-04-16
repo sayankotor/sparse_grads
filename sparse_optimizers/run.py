@@ -7,21 +7,12 @@ import uuid
 import argparse
 from shutil import rmtree
 
-from sparse_grad_reg import replace_roberta_layers, replace_bert_layers
-
-def sparse_grad_linear(model):
-    print ("create bert with sparse grads")
-    #model = replace_roberta_layers(model)
-    model = replace_bert_layers(model)
-    print ("created bert with sparse grads")
-    return model
-
 import torch
 
-#import optuna
-#from optuna.pruners import BasePruner, NopPruner
-#from optuna.trial import TrialState
-#from optuna.study import StudyDirection
+import optuna
+from optuna.pruners import BasePruner, NopPruner
+from optuna.trial import TrialState
+from optuna.study import StudyDirection
 
 from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer, EarlyStoppingCallback, EvalPrediction
 import evaluate as ev
@@ -31,8 +22,9 @@ from utils import get_dataset, MetricsComputer, get_trainable_parameters
 from lora_utils import convert_model as convert2lora
 from sparse_utils import convert_model as convert2sparse, get_UV_dict
 from sparse_grad_matrix_sparse import SparseGradLinearIntermediate, SparseGradLinearOutput
-from trainers_custom import TrainerBert2 as SparseTrainer
-#from trainers_custom import TrainerDoubleOpt as SparseTrainer
+from meprop import MePropLinearIntermediate, MePropLinearOutput, convert_model as convert2meprop
+# from trainers_custom import TrainerBert2 as SparseTrainer
+from trainers_custom import TrainerDoubleOpt as SparseTrainer
 
 
 def make_dataset(model_path_name, dataset_path, dataset_name, max_length):
@@ -49,8 +41,8 @@ def make_dataset(model_path_name, dataset_path, dataset_name, max_length):
     tokenized_dataset = get_dataset(tokenizer, dataset, dset_type=dataset_name, max_length=max_length)
     return tokenized_dataset, num_labels
 
-def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, num_labels,
-    lora_rank, verbose=False):
+def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, enable_meprop, output_modules_path, intermediate_modules_path, num_labels,
+    lora_rank, sparse_n_params, verbose=False):
 
     assert not(enable_lora & enable_sparse)
 
@@ -64,8 +56,6 @@ def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora,
         config=config,
     )
 
-    print (model)
-
     trainable_params, lora_params, all_param = get_trainable_parameters(model)
 
     if enable_lora:
@@ -75,14 +65,12 @@ def make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora,
 
     if enable_sparse:
         UV_dict = get_UV_dict(model, task, output_modules_path, intermediate_modules_path, n_stack_grads=360, tokenized_dataset=tokenized_dataset, lr=lr, batch_size=batch_size, seed=seed, max_steps=11)
-        model = convert2sparse(model, output_modules_path, UV_dict['output'], SparseGradLinearOutput)
-        model = convert2sparse(model, intermediate_modules_path, UV_dict['interm'], SparseGradLinearIntermediate)
-        # model = replace_bert_layers(model, UV_dict)
-        
-    else:
-        model = sparse_grad_linear(model)
-
-    print (model)
+        model = convert2sparse(model, output_modules_path, UV_dict['output'], SparseGradLinearOutput, n_params=sparse_n_params)
+        model = convert2sparse(model, intermediate_modules_path, UV_dict['interm'], SparseGradLinearIntermediate, n_params=sparse_n_params)
+    
+    if enable_meprop:
+        model = convert2meprop(model, output_modules_path, MePropLinearOutput, n_params=sparse_n_params)
+        model = convert2meprop(model, intermediate_modules_path, MePropLinearIntermediate, n_params=sparse_n_params)
 
     return model, trainable_params, lora_params, all_param
 
@@ -118,7 +106,6 @@ def make_trainer(model, task, enable_sparse, tokenized_dataset, output_dir, seed
     else:
         trainer_cls = Trainer
 
-    
     trainer = trainer_cls(  
                 model=model,
                 args=training_args,
@@ -133,55 +120,16 @@ def make_trainer(model, task, enable_sparse, tokenized_dataset, output_dir, seed
 
     return trainer
 
-training_args2 = TrainingArguments(
-    learning_rate=5e-5,
-    num_train_epochs=1,
-    evaluation_strategy="steps",
-    skip_memory_metrics = False,
-    eval_steps=100,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=128,
-    save_steps=1000,
-    overwrite_output_dir=True,
-    output_dir="./bert_stsb_128",
-    # The next line is important to ensure the dataset labels are properly passed to the model
-    remove_unused_columns=True,
-    seed=297104,
-    report_to='none',
-    )
-
-import evaluate as ev
-metric = ev.load("glue", 'cola')
-
-def compute_metrics(p: EvalPrediction):
-        preds_ = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
-        preds_ = np.argmax(preds_, axis=1)
-        
-        result = metric.compute(predictions=preds_, references=p.label_ids)
-        if True:
-            result["combined_score"] = np.mean(list(result.values())).item()
-            return result
-        else:
-            return {"accuracy": (preds_ == p.label_ids).astype(np.float32).mean().item()}
-
-def train(model_path, task, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, verbose=False):
+def train(model_path, task, enable_lora, enable_sparse, enable_meprop, output_modules_path, intermediate_modules_path, seed, batch_size, eval_steps, max_length, lr, num_epoches, max_steps, metric_for_best_model, lora_rank=None, sparse_n_params=None, verbose=False):
     tokenized_dataset, num_labels = make_dataset(model_path, dataset_path='glue', dataset_name=task, max_length=max_length)
-    model, trainable_params, lora_params, all_param = make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, output_modules_path, intermediate_modules_path, num_labels, lora_rank, verbose=verbose)
+    model, trainable_params, lora_params, all_param = make_model(model_path, tokenized_dataset, lr, batch_size, seed, enable_lora, enable_sparse, enable_meprop, output_modules_path, intermediate_modules_path, num_labels, lora_rank, sparse_n_params, verbose=verbose)
     model = model.to('cuda')
     output_dir = str(Path('model') / f'glue-{task}')
     checkpt_name = uuid.uuid4().hex
     checkpoint_dir = str(Path('model') / f'checkpt_{checkpt_name}')
     
 
-    #trainer = make_trainer(model, task, enable_sparse, tokenized_dataset, checkpoint_dir, seed, eval_steps=eval_steps, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
-
-    trainer = Trainer(
-            model=model,
-            args=training_args2,
-            train_dataset=tokenized_dataset["train"],
-            eval_dataset=tokenized_dataset["validation"],
-            compute_metrics = compute_metrics,
-    )
+    trainer = make_trainer(model, task, enable_sparse, tokenized_dataset, checkpoint_dir, seed, eval_steps=eval_steps, metric_for_best_model=metric_for_best_model, batch_size=batch_size, lr=lr, num_epoches=num_epoches, max_steps=max_steps)
     
     train_result = trainer.train()
     eval_result = trainer.evaluate()
@@ -223,14 +171,14 @@ def optuna_objective(trial):
 
     eval_steps = int(task2evalsteps[task] * 16. / batch_size)
 
-    val_metric, _ = train(model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=lora_rank, verbose=verbose)
+    val_metric, _ = train(model_path, task, enable_lora=enable_lora, enable_sparse=enable_sparse, enable_meprop=enable_meprop, output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'], seed=seed, batch_size=batch_size, eval_steps=eval_steps, max_length=max_length, lr=lr, num_epoches=20, max_steps=-1, metric_for_best_model=task2metric_for_best_model[task], lora_rank=model2params[model_path]['lora_rank'], sparse_n_params=model2params[model_path]['sparse_n_params'], verbose=verbose)
     return val_metric
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
-    #parser.add_argument('--task', type=str, required=True)
+    parser.add_argument('--task', type=str, required=True)
     parser.add_argument('--run_type', type=str, required=True)
     parser.add_argument('--model_path', type=str, required=True)
     parser.add_argument('-optimize', action='store_true')
@@ -248,31 +196,41 @@ if __name__ == '__main__':
                                                    'intermediate': '/roberta/encoder/layer/\d+/intermediate/dense'},
                                   'roberta-large': {'output': '/roberta/encoder/layer/\d+/output/dense',
                                                    'intermediate': '/roberta/encoder/layer/\d+/intermediate/dense'}}
+
+    model2params = {'bert-base-uncased': {'lora_rank': 7, 'sparse_n_params': 28000},
+                    'roberta-base': {'lora_rank': 7, 'sparse_n_params': 28000},
+                    'roberta-large': {'lora_rank': 10, 'sparse_n_params': 50000}}
     
     dataset_path = 'glue'
     
-    tasks =  ['rte', 'mrpc', 'sst2', 'stsb', 'wnli','qnli', 'mnli']
+    # tasks, run =  ['cola', 'mnli', 'mrpc']
     # tasks, run = ['qnli', 'qqp', 'rte']
     # tasks, run = ['sst2', 'stsb', 'wnli']
 
-    #task = args.task
+    task = args.task
 
     max_length = 128
     verbose = True
 
-    lora_rank = 7
 
     run_type = args.run_type
 
     if run_type == 'lora':
         enable_lora = True
         enable_sparse = False
+        enable_meprop = False
     elif run_type == 'sparse':
         enable_lora = False
         enable_sparse = True
+        enable_meprop = False
+    elif run_type == 'meprop':
+        enable_lora = False
+        enable_sparse = False
+        enable_meprop = True
     elif run_type == 'ft':
         enable_lora = False
         enable_sparse = False
+        enable_meprop = False
     else:
         raise ValueError('Wrong run_type')
 
@@ -300,7 +258,7 @@ if __name__ == '__main__':
         'wnli': 'accuracy'
     }
 
-    log_dir = f'./logs/{model_path}/{run_type}'
+    log_dir = f'./logs/{run_type}'
 
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
@@ -310,46 +268,171 @@ if __name__ == '__main__':
         seed = 34
 
         study_name = f'{task}_{run_type}_{model_path}'  # Unique identifier of the study.
-        storage_name = "postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
+        # storage_name = "postgresql+psycopg2://sparse-grad:mooKah4i@doge.skoltech.ru/sparse-grad"
+        storage_name = "postgresql+psycopg2://sparse-grad:BiW7oocu@10.1.3.21:5432/sparse-grad"
 
         study = optuna.create_study(study_name=study_name, direction="maximize", storage=storage_name, load_if_exists=True)
-        study.optimize(optuna_objective, n_trials=10, timeout=60*60*24*3, n_jobs=1, gc_after_trial=True)
+        study.optimize(optuna_objective, n_trials=40, timeout=60*60*24*10, n_jobs=1, gc_after_trial=True)
     else:
         # # Calculating mean metrics with optimal params 
 
-        task2hyperparams = {
-            'cola': {'lr': 4e-5, 'batch_size': 8},
-            'mnli': {'lr': 2e-5, 'batch_size': 8},
-            'mrpc': {'lr': 1.2e-5, 'batch_size': 4},
-            'qnli': {'lr': 4e-5, 'batch_size': 16},
-            'qqp': {'lr': 2e-5, 'batch_size': 16},
-            'rte': {'lr': 3.5e-5, 'batch_size': 8},
-            'sst2': {'lr': 1e-5, 'batch_size': 8},
-            'stsb': {'lr': 2e-5, 'batch_size': 4},
-            'wnli': {'lr': 5e-3, 'batch_size': 32},
+        task2hyperparams = \
+        {
+            'bert-base-uncased':
+            {
+                'ft': 
+                    {
+                        'cola': {'lr': 1.01e-5, 'batch_size': 16},
+                        'mnli': {'lr': 1.51e-5, 'batch_size': 32},
+                        'mrpc': {'lr': 1.90e-5, 'batch_size': 16},
+                        'qnli': {'lr': 1.91e-5, 'batch_size': 16},
+                        'qqp': {'lr': 5.11e-6, 'batch_size': 16},
+                        'rte': {'lr': 3.05e-5, 'batch_size': 32},
+                        'sst2': {'lr': 1.33e-5, 'batch_size': 16},
+                        'stsb': {'lr': 2.70e-5, 'batch_size': 16},
+                        'wnli': {'lr': 9.13e-4, 'batch_size': 32},
+                    },
+                'lora':
+                    {
+                        'cola': {'lr': 2.60e-5, 'batch_size': 32},
+                        'mnli': {'lr': 1.00e-5, 'batch_size': 16},
+                        'mrpc': {'lr': 3.11e-5, 'batch_size': 16},
+                        'qnli': {'lr': 1.73e-5, 'batch_size': 16},
+                        'qqp': {'lr': 9.25e-6, 'batch_size': 32},
+                        'rte': {'lr': 3.84e-5, 'batch_size': 16},
+                        'sst2': {'lr': 4.07e-5, 'batch_size': 32},
+                        'stsb': {'lr': 1.12e-4, 'batch_size': 32},
+                        'wnli': {'lr': 1.57e-5, 'batch_size': 32},
+                    },
+                'sparse':
+                    {
+                        'cola': {'lr': 3.15e-5, 'batch_size': 32},
+                        'mnli': {'lr': 6.07e-6, 'batch_size': 32},
+                        'mrpc': {'lr': 1.22e-5, 'batch_size': 32},
+                        'qnli': {'lr': 1.94e-5, 'batch_size': 16},
+                        'qqp': {'lr': 1.41e-5, 'batch_size': 32},
+                        'rte': {'lr': 6.81e-5, 'batch_size': 16},
+                        'sst2': {'lr': 1.47e-5, 'batch_size': 32},
+                        'stsb': {'lr': 1.24e-4, 'batch_size': 32},
+                        'wnli': {'lr': 2.52e-6, 'batch_size': 32},
+                    },
+                'meprop':
+                    {
+                        'cola': {'lr': 3.15e-5, 'batch_size': 32},
+                        'mnli': {'lr': 6.07e-6, 'batch_size': 32},
+                        'mrpc': {'lr': 1.22e-5, 'batch_size': 32},
+                        'qnli': {'lr': 1.94e-5, 'batch_size': 16},
+                        'qqp': {'lr': 1.41e-5, 'batch_size': 32},
+                        'rte': {'lr': 6.81e-5, 'batch_size': 16},
+                        'sst2': {'lr': 1.47e-5, 'batch_size': 32},
+                        'stsb': {'lr': 1.24e-4, 'batch_size': 32},
+                        'wnli': {'lr': 2.52e-6, 'batch_size': 32},
+                    }
+            },
+            'roberta-base':
+            {
+                'ft': 
+                    {
+                        'cola': {'lr': 1.85e-5, 'batch_size': 32},
+                        'mnli': {'lr': 1.15e-6, 'batch_size':   16},
+                        'mrpc': {'lr': 2.47e-5, 'batch_size': 32},
+                        'qnli': {'lr': 8.38e-6, 'batch_size': 16},
+                        'qqp': {'lr': 7.20e-6, 'batch_size': 32},
+                        'rte': {'lr': 1.74e-5, 'batch_size': 32},
+                        'sst2': {'lr': 1.02e-5, 'batch_size': 32},
+                        'stsb': {'lr': 7.71e-5, 'batch_size': 32},
+                        'wnli': {'lr': 2.34e-5, 'batch_size': 16},
+                    }, 
+                'lora':
+                    {
+                        'cola': {'lr': 3.20e-5, 'batch_size': 32},
+                        'mnli': {'lr': 1.04e-5, 'batch_size': 32},
+                        'mrpc': {'lr': 7.02e-5, 'batch_size': 32},
+                        'qnli': {'lr': 5.54e-5, 'batch_size': 32},
+                        'qqp': {'lr': 5.32e-6, 'batch_size': 16},
+                        'rte': {'lr': 1.61e-5, 'batch_size': 16},
+                        'sst2': {'lr': 1.49e-5, 'batch_size': 32},
+                        'stsb': {'lr': 4.87e-5, 'batch_size': 16},
+                        'wnli': {'lr': 3.11e-5, 'batch_size': 16},
+                    }, 
+                'sparse':
+                    {
+                        'cola': {'lr': 2.61e-5, 'batch_size': 32},
+                        'mnli': {'lr': 1.00e-5, 'batch_size': 32},
+                        'mrpc': {'lr': 4.63e-5, 'batch_size': 32},
+                        'qnli': {'lr': 1.66e-5, 'batch_size': 16},
+                        'qqp': {'lr': 1.40e-5, 'batch_size': 32},
+                        'rte': {'lr': 1.81e-5, 'batch_size': 16},
+                        'sst2': {'lr': 2.30e-5, 'batch_size': 32},
+                        'stsb': {'lr': 1.87e-5, 'batch_size': 16},
+                        'wnli': {'lr': 6.48e-5, 'batch_size': 32},
+                    }
+            },
+            'roberta-large':
+            {
+                'ft': 
+                    {
+                        'cola': {'lr': 1.06e-5, 'batch_size': 16},
+                        'mnli': {'lr': 1.01e-6, 'batch_size': 16},
+                        'mrpc': {'lr': 6.79e-6, 'batch_size': 16},
+                        'qnli': {'lr': 2.35e-6, 'batch_size': 32},
+                        'qqp': {'lr': 4.48e-6, 'batch_size': 32},
+                        'rte': {'lr': 6.49e-6, 'batch_size': 16},
+                        'sst2': {'lr': 8.77e-6, 'batch_size': 32},
+                        'stsb': {'lr': 1.11e-5, 'batch_size': 32},
+                        'wnli': {'lr': 1.57e-6, 'batch_size': 16},
+                    }, 
+                'lora':
+                    {
+                        'cola': {'lr': 5.86e-6, 'batch_size': 16},
+                        'mnli': {'lr': 1.09e-6, 'batch_size': 16},
+                        'mrpc': {'lr': 1.56e-5, 'batch_size': 16},
+                        'qnli': {'lr': 1.19e-5, 'batch_size': 16},
+                        'qqp': {'lr': 1.57e-5, 'batch_size': 32},
+                        'rte': {'lr': 4.17e-5, 'batch_size': 16},
+                        'sst2': {'lr': 5.01e-6, 'batch_size': 16},
+                        'stsb': {'lr': 2.96e-5, 'batch_size': 16},
+                        'wnli': {'lr': 4.14e-5, 'batch_size': 32},
+                    }, 
+                'sparse':
+                    {
+                        'cola': {'lr': 1.27e-5, 'batch_size': 32},
+                        'mnli': {'lr': 4.34e-6, 'batch_size': 32},
+                        'mrpc': {'lr': 1.96e-5, 'batch_size': 16},
+                        'qnli': {'lr': 5.56e-6, 'batch_size': 16},
+                        'qqp': {'lr': 2.89e-6, 'batch_size': 32},
+                        'rte': {'lr': 2.10e-5, 'batch_size': 32},
+                        'sst2': {'lr': 1.46e-6, 'batch_size': 32},
+                        'stsb': {'lr': 2.11e-5, 'batch_size': 16},
+                        'wnli': {'lr': 1.32e-6, 'batch_size': 16},
+                    }
+            }
         }
 
-        random_seeds = [42, 3705, 2023]#, 7, 3612]
-        for task in tasks:
-            log_file = os.path.join(log_dir, f'{task}.json')
-            for seed in random_seeds:
-                _, metrics = train(model_path, task,
-                    enable_lora=enable_lora, enable_sparse=enable_sparse,
-                    output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
-                    seed=seed, metric_for_best_model=task2metric_for_best_model[task],
-                    batch_size=task2hyperparams[task]['batch_size'],
-                    eval_steps=int(task2evalsteps[task] * 16. / task2hyperparams[task]['batch_size']),
-                    max_length=max_length,
-                    lr=task2hyperparams[task]['lr'],
-                    num_epoches=20, max_steps=-1, lora_rank=lora_rank, verbose=True)
+        hyperparams = task2hyperparams[model_path][run_type][task]
 
-                if os.path.exists(log_file):
-                    with open(log_file, 'r') as f:
-                        logs = json.load(f)
-                else:
-                    logs = {}
+        random_seeds = [42, 3705, 2023]
+        # random_seeds = [37, 7777]
+        log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
+        for seed in random_seeds:
+            _, metrics = train(model_path, task,
+                enable_lora=enable_lora, enable_sparse=enable_sparse, enable_meprop=enable_meprop,
+                output_modules_path=model2replace_modules_path[model_path]['output'], intermediate_modules_path=model2replace_modules_path[model_path]['intermediate'],
+                seed=seed, metric_for_best_model=task2metric_for_best_model[task],
+                batch_size=hyperparams['batch_size'],
+                eval_steps=int(task2evalsteps[task] * 16. / hyperparams['batch_size']),
+                max_length=max_length,
+                lr=hyperparams['lr'],
+                num_epoches=20, max_steps=-1,
+                lora_rank=model2params[model_path]['lora_rank'], sparse_n_params=model2params[model_path]['sparse_n_params'], verbose=True)
 
-                with open(log_file, 'w') as f:
-                    logs.update({seed: metrics})
-                    json.dump(logs, f)
+            if os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    logs = json.load(f)
+            else:
+                logs = {}
+
+            with open(log_file, 'w') as f:
+                logs.update({seed: metrics})
+                json.dump(logs, f)
     
