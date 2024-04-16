@@ -3,7 +3,6 @@ import torch
 from transformers import Trainer
 import evaluate as ev
 import numpy as np
-import shutil
 
 from transformers import TrainingArguments, Trainer, EvalPrediction
 
@@ -94,7 +93,7 @@ def Tucker_Decomposition(tensor):
     u3, _, _ = torch.svd(torch.reshape(torch.permute(tensor, [2, 0, 1]), (n3, -1)))
     return u1, u2, u3        
         
-class TrainerBert1(Trainer):
+class TrainerLlama1(Trainer):
     
     def make_grad_bank(self):
         self.n_show = 3
@@ -110,15 +109,16 @@ class TrainerBert1(Trainer):
             loss = self.compute_loss(model, inputs)
         loss.backward()
         self.n_steps += 1
-        for layer in range(12):  
-            if (len(self.grads1)) < 360:
-                cur_grad = model.bert.encoder.layer[layer].output.dense.weight.grad
-                self.grads1.append(torch.empty_like(cur_grad).copy_(cur_grad))
-
-            if (len(self.grads2)) < 360:
-                cur_grad = model.bert.encoder.layer[layer].intermediate.dense.weight.grad
-                self.grads2.append(torch.empty_like(cur_grad).copy_(cur_grad))
-                
+        for layer in range(len(model.model.layers)):
+            if (layer % 3 == 0):
+                if (len(self.grads1)) < 450:
+                    cur_grad = model.model.layers[layer].mlp.up_proj.weight.grad.detach().cpu()
+                    self.grads1.append(cur_grad)
+    
+                if (len(self.grads2)) < 450:
+                    cur_grad = model.model.layers[layer].mlp.down_proj.weight.grad.detach().cpu()
+                    self.grads2.append(cur_grad)
+                    
 
             else:              
                 pass
@@ -169,7 +169,7 @@ class TrainerBert2(Trainer):
             loss = self.compute_loss(model, inputs)
         loss.backward()
         self.n_steps += 1
-        if  (self.n_steps == -210 or self.n_steps == -200):
+        if  (self.n_steps == 10 or self.n_steps == 200):
             
             if (self.show_out_grads):
                 print ("\n\n n_step ", self.n_steps)
@@ -681,13 +681,13 @@ class TrainerDoubleOpt(Trainer):
                     if args.max_grad_norm is not None and args.max_grad_norm > 0:
                         # deepspeed does its own clipping
 
-                        #if self.do_grad_scaling:
+                        if self.do_grad_scaling:
                             # Reduce gradients first for XLA
-                            #if is_torch_tpu_available():
-                                #gradients = xm._fetch_gradients(self.optimizer)
-                                #xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
+                            if is_torch_tpu_available():
+                                gradients = xm._fetch_gradients(self.optimizer)
+                                xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
                             # AMP: gradients need unscaling
-                            #self.scaler.unscale_(self.optimizer)
+                            self.scaler.unscale_(self.optimizer)
 
                         if is_sagemaker_mp_enabled() and args.fp16:
                             self.optimizer.clip_master_grads(args.max_grad_norm)
@@ -718,12 +718,12 @@ class TrainerDoubleOpt(Trainer):
                         else:
                             # tpu-comment: accelerate wrapped optimizers call xm.optimizer_step
                             self.optimizer.step()
-                    #elif self.do_grad_scaling:
-                        #scale_before = self.scaler.get_scale()
-                        #self.scaler.step(self.optimizer)
-                        #self.scaler.update()
-                        #scale_after = self.scaler.get_scale()
-                        #optimizer_was_run = scale_before <= scale_after
+                    elif self.do_grad_scaling:
+                        scale_before = self.scaler.get_scale()
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                        scale_after = self.scaler.get_scale()
+                        optimizer_was_run = scale_before <= scale_after
                     else:
                         self.optimizer.step()
                         self.optimizer_sp.step()
@@ -769,8 +769,8 @@ class TrainerDoubleOpt(Trainer):
             # Wait for everyone to get here so we are sur the model has been saved by process 0.
             if is_torch_tpu_available():
                 xm.rendezvous("load_best_model_at_end")
-            # elif args.parallel_mode == ParallelMode.DISTRIBUTED:
-            #     dist.barrier()
+            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
+                dist.barrier()
             elif is_sagemaker_mp_enabled():
                 smp.barrier()
 

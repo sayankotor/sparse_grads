@@ -7,28 +7,37 @@ from transformers import TrainingArguments, Trainer
 from util import compute_metrics
 
 # Custom trainers
-from trainers_custom import TrainerBert1, TrainerBert2, TrainerDoubleOpt
+from trainers_custom import TrainerBert2, TrainerDoubleOpt, TrainerLlama1
 
-def pre_trainer_function(model, training_args1, tokenized_dataset):
+trainer = Trainer(
+        model=base_model,
+        args=training_args,
+        train_dataset=training_data,
+        callbacks = callbacks,
+        eval_dataset=val_data,
+        tokenizer=llama_tokenizer)
+
+def pre_trainer_function(model, training_args1, training_data):
     
-    trainer = TrainerBert1(
+    trainer = TrainerLlama1(
         model=model,
         args=training_args1,
-        train_dataset=tokenized_dataset["train"],
-        eval_dataset=tokenized_dataset["validation"],
+        train_dataset=training_data,
+        max_steps=30,
+        #eval_dataset=tokenized_dataset["validation"],
         compute_metrics = compute_metrics,
     )
     trainer.make_grad_bank()
     trainer.train()
     UV_dict = {}
 
-    grads1 = torch.stack(trainer.grads1[:360])
-    grads2 = torch.stack(trainer.grads2[:360])
+    grads1 = torch.stack(trainer.grads1[:450])
+    grads2 = torch.stack(trainer.grads2[:450])
     del trainer
     u1, VT, U = Tucker_Decomposition(grads1)
-    UV_dict.update({"output":tuple((U, VT))})
+    UV_dict.update({"up":tuple((U, VT))})
     u1, VT, U = Tucker_Decomposition(grads2)
-    UV_dict.update({"interm":tuple((U, VT))})
+    UV_dict.update({"down":tuple((U, VT))})
 #     model = sparse_grad_linear(model, UV_dict)
     del grads1, grads2
     return UV_dict
