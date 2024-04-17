@@ -1,5 +1,5 @@
 s = ''
-device = 3
+device = 1
 # tasks = ['cola', 'stsb', 'mrpc', 'qnli', 'rte', 'sst2']
 # tasks = ['qqp',]
 # tasks = ['stsb', 'mrpc', 'qnli', 'rte', 'sst2']

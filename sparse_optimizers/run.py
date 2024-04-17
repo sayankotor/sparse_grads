@@ -182,7 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('--run_type', type=str, required=True)
     parser.add_argument('--model_path', type=str, required=True)
     parser.add_argument('-optimize', action='store_true')
-    parser.add_argument('--n_params', type='int', required=False)
+    parser.add_argument('--n_params', type=int, required=False)
 
 
     args = parser.parse_args()
