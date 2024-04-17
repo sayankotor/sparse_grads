@@ -182,6 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('--run_type', type=str, required=True)
     parser.add_argument('--model_path', type=str, required=True)
     parser.add_argument('-optimize', action='store_true')
+    parser.add_argument('--n_params', type='int', required=False)
 
 
     args = parser.parse_args()
@@ -200,6 +201,9 @@ if __name__ == '__main__':
     model2params = {'bert-base-uncased': {'lora_rank': 7, 'sparse_n_params': 28000},
                     'roberta-base': {'lora_rank': 7, 'sparse_n_params': 28000},
                     'roberta-large': {'lora_rank': 10, 'sparse_n_params': 50000}}
+    
+    if args.n_params is not None:
+        model2params[args.model_path]['sparse_n_params'] = args.n_params
     
     dataset_path = 'glue'
     
@@ -413,7 +417,10 @@ if __name__ == '__main__':
 
         random_seeds = [42, 3705, 2023]
         # random_seeds = [37, 7777]
-        log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
+        if args.n_params is not None:
+            log_file = os.path.join(log_dir, f'{model_path}_{task}_{args.n_params}.json')
+        else:
+            log_file = os.path.join(log_dir, f'{model_path}_{task}.json')
         for seed in random_seeds:
             _, metrics = train(model_path, task,
                 enable_lora=enable_lora, enable_sparse=enable_sparse, enable_meprop=enable_meprop,
