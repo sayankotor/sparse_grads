@@ -29,7 +29,7 @@ switch branch from main to lora_benchmark
 
 **cd sparse_grad**
 
-**run.py** 
+**run.py --task 'stsb' --run_type sparse --model_path 'roberta-base' --optimize False --n_params 280000** 
 
 --task task in GLUE 
 
