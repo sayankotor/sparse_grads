@@ -24,7 +24,8 @@ The modifications of Hugginface Trainer class for model with semi-sparse gradien
 **CUDA_VISIBLE_DEVICES=0 python3 test_roberta.py --cuda 0 --sparse_grad**
 
 
-3. To employ the full fine-tuning benchmark
+3. To employ the full fine-tuning benchmark:
+   
 switch branch from main to lora_benchmark
 
 **cd sparse_grad**
