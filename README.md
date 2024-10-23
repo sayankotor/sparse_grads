@@ -9,17 +9,20 @@ The modifications of Hugginface Trainer class for model with semi-sparse gradien
 
 # Experiments with BERT and RoBERTa
 
+
 1. To apply Sparse Grad method to fine-tune BERT model on Cola dataset:
    
 **cd bert/**
 
 **CUDA_VISIBLE_DEVICES=0 python3 test_bert.py --cuda 0 --sparse_grad**
 
+
 2. To do the same with RoBERTa:
    
 **cd roberta/**
 
 **CUDA_VISIBLE_DEVICES=0 python3 test_roberta.py --cuda 0 --sparse_grad**
+
 
 3. To employ the full fine-tuning benchmark
 switch branch from main to lora_benchmark
@@ -37,6 +40,7 @@ switch branch from main to lora_benchmark
 --optimize It now involves a search for optimal parameters. 
 
 --n_params The number of parameters in the linear layer remained trainable.
+
 
 # Experiments with LLaMa 2 7B
 
