@@ -22,7 +22,21 @@ The modifications of Hugginface Trainer class for model with semi-sparse gradien
 **CUDA_VISIBLE_DEVICES=0 python3 test_roberta.py --cuda 0 --sparse_grad**
 
 3. To employ the full fine-tuning benchmark
-switch branch from main to benchmark
+switch branch from main to lora_benchmark
+
+**cd sparse_grad**
+
+**run.py** 
+
+--task task in GLUE 
+
+--run_type ft (regular fine-tune), lora (Low Rank Adaptation), sparse (Sparse Grad), meprop (MeProp) 
+
+--model_path Path to model on HF or local storage 
+
+--optimize It now involves a search for optimal parameters. 
+
+--n_params The number of parameters in the linear layer remained trainable.
 
 # Experiments with LLaMa 2 7B
 
