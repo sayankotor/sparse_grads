@@ -45,13 +45,12 @@ switch branch from main to lora_benchmark
 
 # Experiments with LLaMa 2 7B
 
-LLaMa 2 7B fine-tuned on openassistant dataset are in
+LLaMa 2 7B fine-tuned on openassistant dataset are in HF **Sayankotor/RegularLlama**
 
-LLaMa 2 7B fine-tuned on openassistant dataset using LoRA are in
+LLaMa 2 7B fine-tuned on openassistant dataset using LoRA are in HF **Sayankotor/LoraLlama**
 
-LLaMa 2 7B fine-tuned on openassistant dataset using Sparse Grad are in
+The weights of LLaMa 2 7B fine-tuned on openassistant dataset using Sparse Grad can be downloaded in **llama_ft/Model_Download.ipynb**
 
-The example of usage:
 
 
 
