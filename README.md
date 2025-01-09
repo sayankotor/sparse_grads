@@ -43,13 +43,36 @@ switch branch from main to lora_benchmark
 --n_params The number of parameters in the linear layer remained trainable.
 
 
-# Experiments with LLaMa 2 7B
+## News and Updates
 
-LLaMa 2 7B fine-tuned on openassistant dataset are in HF **https://huggingface.co/Sayankotor/RegularLlama**
+* ```2024.12.12``` 👏👏👏 SparseGrad has been presented by EMNLP 2024 Main!
 
-LLaMa 2 7B fine-tuned on openassistant dataset using LoRA are in HF **https://huggingface.co/Sayankotor/LoraLlama**
 
-The weights of LLaMa 2 7B fine-tuned on openassistant dataset using Sparse Grad can be downloaded in **llama_ft/Model_Download.ipynb**
+## <a name="Citing"></a>Citation
+Consider giving this repository a star and cite SparseGrad in your publications if it helps your research.
+
+```
+@inproceedings{chekalina-etal-2024-sparsegrad,
+    title = "{S}parse{G}rad: A Selective Method for Efficient Fine-tuning of {MLP} Layers",
+    author = "Chekalina, Viktoriia A.  and
+      Rudenko, Anna  and
+      Mezentsev, Gleb  and
+      Mikhalev, Aleksandr  and
+      Panchenko, Alexander  and
+      Oseledets, Ivan",
+    editor = "Al-Onaizan, Yaser  and
+      Bansal, Mohit  and
+      Chen, Yun-Nung",
+    booktitle = "Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing",
+    month = nov,
+    year = "2024",
+    address = "Miami, Florida, USA",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2024.emnlp-main.831/",
+    doi = "10.18653/v1/2024.emnlp-main.831",
+    pages = "14929--14939",
+    abstract = "The performance of Transformer models has been enhanced by increasing the number of parameters and the length of the processed text. Consequently, fine-tuning the entire model becomes a memory-intensive process. High-performance methods for parameter-efficient fine-tuning (PEFT) typically work with Attention blocks and often overlook MLP blocks, which contain about half of the model parameters. We propose a new selective PEFT method, namely SparseGrad, that performs well on MLP blocks. We transfer layer gradients to a space where only about 1{\%} of the layer`s elements remain significant. By converting gradients into a sparse structure, we reduce the number of updated parameters. We apply SparseGrad to fine-tune BERT and RoBERTa for the NLU task and LLaMa-2 for the Question-Answering task. In these experiments, with identical memory requirements, our method outperforms LoRA and MeProp, robust popular state-of-the-art PEFT approaches."
+}
 
 
 
